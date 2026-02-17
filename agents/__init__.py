@@ -1,16 +1,22 @@
 """
-Trading Agent Package - Modular organization of trading agent components
+Trading Agent Package - Modular organization
 """
 
 from .types import Side, Position
 from .market_data import MarketData
-from .strategy import TradingStrategy
-from .agent import TradingAgent
+from .interfaces import BaseStrategy, StrategySignal
+from .engine import MarketMakerEngine
+
+# Optionnel : Exposer les stratégies directement
+from .strategies.sma import SMAStrategy
+# from .strategies.rl_agent import RLAgentStrategy
 
 __all__ = [
-    "Side",
+    "Side", 
     "Position",
     "MarketData",
-    "TradingStrategy",
-    "TradingAgent",
+    "BaseStrategy",
+    "StrategySignal",
+    "MarketMakerEngine",
+    "SMAStrategy",
 ]
