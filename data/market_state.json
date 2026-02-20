@@ -1,0 +1,376 @@
+{
+  "ask_price": 8173,
+  "asks": [
+    {
+      "price": 8173,
+      "quantity": 53975
+    },
+    {
+      "price": 8175,
+      "quantity": 51391
+    },
+    {
+      "price": 8176,
+      "quantity": 40022
+    },
+    {
+      "price": 8177,
+      "quantity": 66956
+    },
+    {
+      "price": 8178,
+      "quantity": 89585
+    },
+    {
+      "price": 8179,
+      "quantity": 75458
+    },
+    {
+      "price": 8180,
+      "quantity": 142632
+    },
+    {
+      "price": 8181,
+      "quantity": 240572
+    },
+    {
+      "price": 8183,
+      "quantity": 228447
+    },
+    {
+      "price": 8184,
+      "quantity": 193032
+    },
+    {
+      "price": 8186,
+      "quantity": 153136
+    },
+    {
+      "price": 8187,
+      "quantity": 46779
+    },
+    {
+      "price": 8188,
+      "quantity": 129437
+    },
+    {
+      "price": 8189,
+      "quantity": 202095
+    },
+    {
+      "price": 8190,
+      "quantity": 64733
+    },
+    {
+      "price": 8191,
+      "quantity": 70235
+    },
+    {
+      "price": 8192,
+      "quantity": 148107
+    },
+    {
+      "price": 8193,
+      "quantity": 41577
+    },
+    {
+      "price": 8194,
+      "quantity": 103592
+    },
+    {
+      "price": 8195,
+      "quantity": 186792
+    },
+    {
+      "price": 8196,
+      "quantity": 36964
+    },
+    {
+      "price": 8197,
+      "quantity": 95544
+    },
+    {
+      "price": 8198,
+      "quantity": 195914
+    },
+    {
+      "price": 8199,
+      "quantity": 197602
+    },
+    {
+      "price": 8200,
+      "quantity": 42453
+    },
+    {
+      "price": 8201,
+      "quantity": 17559
+    },
+    {
+      "price": 8202,
+      "quantity": 61491
+    },
+    {
+      "price": 8203,
+      "quantity": 119185
+    },
+    {
+      "price": 8204,
+      "quantity": 16253
+    },
+    {
+      "price": 8205,
+      "quantity": 157022
+    },
+    {
+      "price": 8206,
+      "quantity": 127803
+    },
+    {
+      "price": 8207,
+      "quantity": 132700
+    },
+    {
+      "price": 8208,
+      "quantity": 21001
+    },
+    {
+      "price": 8209,
+      "quantity": 12865
+    },
+    {
+      "price": 8210,
+      "quantity": 6372
+    },
+    {
+      "price": 8211,
+      "quantity": 96138
+    },
+    {
+      "price": 8212,
+      "quantity": 65284
+    },
+    {
+      "price": 8213,
+      "quantity": 6368
+    },
+    {
+      "price": 8214,
+      "quantity": 6744
+    },
+    {
+      "price": 8215,
+      "quantity": 213458
+    },
+    {
+      "price": 8216,
+      "quantity": 323
+    },
+    {
+      "price": 8217,
+      "quantity": 28449
+    },
+    {
+      "price": 8218,
+      "quantity": 51
+    },
+    {
+      "price": 8219,
+      "quantity": 3049
+    },
+    {
+      "price": 8220,
+      "quantity": 7517
+    },
+    {
+      "price": 8221,
+      "quantity": 271926
+    },
+    {
+      "price": 8222,
+      "quantity": 56096
+    },
+    {
+      "price": 8223,
+      "quantity": 136782
+    }
+  ],
+  "bid_price": 8173,
+  "bids": [
+    {
+      "price": 8173,
+      "quantity": 5581
+    },
+    {
+      "price": 8172,
+      "quantity": 45764
+    },
+    {
+      "price": 8170,
+      "quantity": 259512
+    },
+    {
+      "price": 8169,
+      "quantity": 105460
+    },
+    {
+      "price": 8168,
+      "quantity": 158928
+    },
+    {
+      "price": 8167,
+      "quantity": 98887
+    },
+    {
+      "price": 8166,
+      "quantity": 98173
+    },
+    {
+      "price": 8165,
+      "quantity": 134612
+    },
+    {
+      "price": 8164,
+      "quantity": 30314
+    },
+    {
+      "price": 8163,
+      "quantity": 65757
+    },
+    {
+      "price": 8162,
+      "quantity": 203722
+    },
+    {
+      "price": 8161,
+      "quantity": 12576
+    },
+    {
+      "price": 8159,
+      "quantity": 181229
+    },
+    {
+      "price": 8158,
+      "quantity": 59089
+    },
+    {
+      "price": 8156,
+      "quantity": 106443
+    },
+    {
+      "price": 8155,
+      "quantity": 36647
+    },
+    {
+      "price": 8154,
+      "quantity": 12554
+    },
+    {
+      "price": 8153,
+      "quantity": 19809
+    },
+    {
+      "price": 8152,
+      "quantity": 138717
+    },
+    {
+      "price": 8151,
+      "quantity": 70542
+    },
+    {
+      "price": 8150,
+      "quantity": 199862
+    },
+    {
+      "price": 8148,
+      "quantity": 43814
+    },
+    {
+      "price": 8147,
+      "quantity": 18602
+    },
+    {
+      "price": 8145,
+      "quantity": 86824
+    },
+    {
+      "price": 8144,
+      "quantity": 178174
+    },
+    {
+      "price": 8143,
+      "quantity": 19819
+    },
+    {
+      "price": 8142,
+      "quantity": 13033
+    },
+    {
+      "price": 8141,
+      "quantity": 14521
+    },
+    {
+      "price": 8140,
+      "quantity": 12271
+    },
+    {
+      "price": 8139,
+      "quantity": 15414
+    },
+    {
+      "price": 8138,
+      "quantity": 102099
+    },
+    {
+      "price": 8137,
+      "quantity": 57887
+    },
+    {
+      "price": 8136,
+      "quantity": 129173
+    },
+    {
+      "price": 8134,
+      "quantity": 27718
+    },
+    {
+      "price": 8133,
+      "quantity": 6250
+    },
+    {
+      "price": 8131,
+      "quantity": 75777
+    },
+    {
+      "price": 8130,
+      "quantity": 9452
+    },
+    {
+      "price": 8129,
+      "quantity": 45214
+    },
+    {
+      "price": 8128,
+      "quantity": 149751
+    },
+    {
+      "price": 8127,
+      "quantity": 2855
+    },
+    {
+      "price": 8126,
+      "quantity": 9494
+    },
+    {
+      "price": 8125,
+      "quantity": 16171
+    },
+    {
+      "price": 8123,
+      "quantity": 274291
+    }
+  ],
+  "iteration": 2,
+  "mid_price": 8173.0,
+  "spread": 0,
+  "spread_bps": 0.0
+}
