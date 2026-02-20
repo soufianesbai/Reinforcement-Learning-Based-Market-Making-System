@@ -100,6 +100,10 @@ class MarketMakerEngine:
                     continue
                 
                 iteration += 1
+                if hasattr(self.strategy, 'current_inventory'):
+                     qty = self.position.quantity if self.position else 0.0
+                     # Remettre en négatif si c'est une position Short (si votre C++ le gère)
+                     self.strategy.current_inventory = qty
                 
                 # 2. Update Strategy
                 self.strategy.update_data(state)
