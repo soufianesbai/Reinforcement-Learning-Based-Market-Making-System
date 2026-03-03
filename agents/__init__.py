@@ -10,6 +10,7 @@ from .engine import MarketMakerEngine
 # Optionnel : Exposer les stratégies directement
 from .strategies.sma import SMAStrategy
 # from .strategies.rl_agent import RLAgentStrategy
+#from .strategies.a2c_rl import A2CStrategy
 
 __all__ = [
     "Side", 
