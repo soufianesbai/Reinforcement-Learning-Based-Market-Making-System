@@ -45,7 +45,7 @@ class ActorCriticNetwork(nn.Module):
         return action, dist.log_prob(action), value 
 
 
-# ── Strategy (Live Inference) ─────────────────────────────────────────────────
+#strategy
 
 class A2CStrategy(BaseStrategy):
     """
@@ -57,18 +57,18 @@ class A2CStrategy(BaseStrategy):
     def __init__(self, symbol: str = "SOLUSDT",
                  model_path: str = "models/a2c_actor_critic.pth",
                  quantity_per_trade: float = 5.0):
-        self.device      = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.market_data = MarketData(window_size=10)
-        self.quantity    = quantity_per_trade
+        self.device      = torch.device("cuda" if torch.cuda.is_available() else "cpu") #use gpu if available (faster inference), otherwise cpu
+        self.market_data = MarketData(window_size=10) #helper from market_data.py
+        self.quantity    = quantity_per_trade #how much to buy/sell per trade (can be changed based on risk appetite)
         self.model_loaded = False
         self.current_inventory = 0.0
-        self.observation: Optional[np.ndarray] = None
+        self.observation: Optional[np.ndarray] = None #current state vector(updated in update_data every tick)
 
-        self.net = ActorCriticNetwork(state_dim=4, action_dim=3).to(self.device)
+        self.net = ActorCriticNetwork(state_dim=4, action_dim=3).to(self.device) #nn architecture (random weights)
 
         if os.path.exists(model_path):
-            self.net.load_state_dict(torch.load(model_path, map_location=self.device))
-            self.net.eval()
+            self.net.load_state_dict(torch.load(model_path, map_location=self.device)) #load the pre-trained model weights
+            self.net.eval() #disable training mode
             self.model_loaded = True
             print(f"[A2C] Model loaded from {model_path}")
         else:
@@ -76,12 +76,12 @@ class A2CStrategy(BaseStrategy):
 
     def _build_observation(self) -> Optional[np.ndarray]:
         """Build normalised state vector — identical to training environment."""
-        if len(self.market_data.prices) < 3:
+        if len(self.market_data.prices) < 3: 
             return None
 
-        b_qty = sum(b["quantity"] for b in self.market_data.bids[:3]) if self.market_data.bids else 0
-        a_qty = sum(a["quantity"] for a in self.market_data.asks[:3]) if self.market_data.asks else 0
-        imb   = (b_qty - a_qty) / (b_qty + a_qty) if (b_qty + a_qty) > 0 else 0.0
+        b_qty = sum(b["quantity"] for b in self.market_data.bids[:3]) if self.market_data.bids else 0 
+        a_qty = sum(a["quantity"] for a in self.market_data.asks[:3]) if self.market_data.asks else 0 
+        imb   = (b_qty - a_qty) / (b_qty + a_qty) if (b_qty + a_qty) > 0 else 0.0 #orderbook imbalance
 
         norm_imb    = float(np.clip(imb, -1.0, 1.0))
         norm_spread = (self.market_data.spread / self.market_data.mid_price * 10000) / 10.0 \
@@ -91,7 +91,7 @@ class A2CStrategy(BaseStrategy):
 
         return np.array([norm_imb, norm_spread, norm_dev, norm_inv], dtype=np.float32)
 
-    # ── BaseStrategy Interface ────────────────────────────────────────────────
+    #BaseStrategy Interface
 
     def update_data(self, market_state: Dict) -> None:
         self.market_data.update(market_state)
@@ -101,16 +101,16 @@ class A2CStrategy(BaseStrategy):
         if self.observation is None or not self.model_loaded:
             return StrategySignal(None, 0, 0, "A2C: warming up...", {})
 
-        state_t = torch.tensor(self.observation).unsqueeze(0).to(self.device)
+        state_t = torch.tensor(self.observation).unsqueeze(0).to(self.device) #convert state to tensor and add batch dimension (1,4)
 
-        with torch.no_grad():
+        with torch.no_grad(): #no need to compute gradients during inference
             logits, value = self.net(state_t)
             # Greedy during live trading (no sampling)
             action_idx = torch.argmax(logits, dim=-1).item()
             confidence = torch.softmax(logits, dim=-1)[0, action_idx].item()
 
-        mid    = int(self.market_data.mid_price * 100)
-        offset = int(self.market_data.spread * 100 / 2)
+        mid    = int(self.market_data.mid_price * 100) 
+        offset = int(self.market_data.spread * 100 / 2) #place buy/sell orders at the best bid/ask (mid ± half spread)
 
         if action_idx == 1:   # BUY
             self.current_inventory += self.quantity
@@ -127,8 +127,8 @@ class A2CStrategy(BaseStrategy):
                 {"action": "SELL", "value": value.item(), "confidence": confidence}
             )
 
-        return StrategySignal(None, 0, 0, f"A2C HOLD (conf: {confidence:.2f})",
-                              {"action": "HOLD", "value": value.item()})
+        return StrategySignal(None, 0, 0, f"A2C HOLD (conf: {confidence:.2f})", 
+                              {"action": "HOLD", "value": value.item()}) # HOLD
 
     def get_status(self) -> Dict[str, Any]:
         return {
