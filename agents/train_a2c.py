@@ -48,16 +48,13 @@ class ToyMarketEnv:
         return sum(self.price_history) / len(self.price_history)
 
     def _obs(self):
-        imb = 1 
-        
-        spread_bps = 2.0 / 10.0 
-        
+        imb = 1
+        spread_bps = 2.0 / 10.0
         current_sma = self.get_sma()
-        deviation = (self.price - current_sma) / current_sma * 100.0 / 2.0
-        
+        deviation = (self.price - current_sma) / (current_sma + 1e-8) * 50.0
         norm_inv = self.inventory / self.max_inv
-        
-        return np.array([imb, spread_bps, deviation, norm_inv], dtype=np.float32)
+        price_change = (self.price - self.last_price) / (self.last_price + 1e-8) * 100.0 
+        return np.array([imb, spread_bps, deviation, norm_inv, price_change], dtype=np.float32)
 
     def step(self, action: int):
         self.step_count += 1
@@ -72,7 +69,7 @@ class ToyMarketEnv:
         if action == 1 and self.inventory < self.max_inv:
             self.cash -= (self.price + spread) * self.qty
             self.inventory += self.qty
-        elif action == 2 and self.inventory > -self.max_inv:
+        elif action == 2 and self.inventory > 0:
             self.cash += (self.price - spread) * self.qty
             self.inventory -= self.qty
 
@@ -82,21 +79,24 @@ class ToyMarketEnv:
         #penalty = 0.005 * abs(self.inventory)
         penalty = 0.0
         
-        reward = mtm - penalty
+        #reward = mtm - penalty
+        price_move = self.price - self.last_price
+        opportunity_cost = -0.1 * price_move if self.inventory == 0 else 0.0
+        reward = mtm - penalty + opportunity_cost
 
         done = self.step_count >= self.max_steps
         return self._obs(), reward, done
 
 
-def train_critic(lr_actor=1e-2, lr_critic=1e-2, gamma=0.99, n_episodes=500, MAX_GRAD_NORM=0.5):
+def train_critic(lr_actor=1e-2, lr_critic=1e-2, gamma=0.99, n_episodes=1000, MAX_GRAD_NORM=0.5):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[A2C Q-Critic] Training on {device}")
 
     start_time = time.time()
 
     env = ToyMarketEnv(max_steps=200)
-    actor  = ActorNN(state_dim=4, action_dim=3).to(device)
-    critic = CriticNN(state_dim=4, action_dim=3).to(device)
+    actor  = ActorNN(state_dim=5, action_dim=3).to(device)
+    critic = CriticNN(state_dim=5, action_dim=3).to(device)
 
     actor_optim  = optim.Adam(actor.parameters(),  lr=lr_actor)
     critic_optim = optim.Adam(critic.parameters(), lr=lr_critic)
@@ -170,7 +170,9 @@ def train_critic(lr_actor=1e-2, lr_critic=1e-2, gamma=0.99, n_episodes=500, MAX_
             advantages = (q_sa_detach - v_s_detach).squeeze()
 
         entropies_t = torch.stack(entropies)
-        entropy_coef = 0.05
+        entropy_coef = 0.1
+        #entropy_coef = max(0.01, 0.1 * (1 - ep / n_episodes))
+
 
         actor_loss = (-log_probs_t * advantages + -entropy_coef * entropies_t).mean()
         # actor_loss = -(log_probs_t * advantages).mean()
