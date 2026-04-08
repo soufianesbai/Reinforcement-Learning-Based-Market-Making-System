@@ -76,10 +76,10 @@ class ToyMarketEnv:
             self.cash += (self.price - spread) * self.qty
             self.inventory -= self.qty
 
-        # Mark-to-Market PnL
+        #PnL
         mtm = self.inventory * (self.price - self.last_price)
         
-        # penalty = 0.005 * abs(self.inventory)
+        #penalty = 0.005 * abs(self.inventory)
         penalty = 0.0
         
         reward = mtm - penalty
@@ -88,7 +88,7 @@ class ToyMarketEnv:
         return self._obs(), reward, done
 
 
-def train_critic(lr_actor=1e-3, lr_critic=1e-3, gamma=0.99, n_episodes=1000, MAX_GRAD_NORM=0.5):
+def train_critic(lr_actor=1e-2, lr_critic=1e-2, gamma=0.99, n_episodes=500, MAX_GRAD_NORM=0.5):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[A2C Q-Critic] Training on {device}")
 
@@ -132,7 +132,7 @@ def train_critic(lr_actor=1e-3, lr_critic=1e-3, gamma=0.99, n_episodes=1000, MAX
 
         episode_rewards.append(episode_reward)
 
-        # max Q(s_T, a') over all actions for the last state
+        #max Q(s_T, a') over all actions for the last state (needed for returns)
         with torch.no_grad():
             last_state_t = torch.tensor(next_states[-1]).unsqueeze(0).to(device)
             q_next_max = float('-inf')
@@ -141,7 +141,6 @@ def train_critic(lr_actor=1e-3, lr_critic=1e-3, gamma=0.99, n_episodes=1000, MAX
                 q_next, _ = critic(last_state_t, a_idx_t)
                 q_next_max = max(q_next_max, q_next.item())
 
-        # Compute Returns
         returns = []
         R = q_next_max
         for r in reversed(rewards):
@@ -169,7 +168,6 @@ def train_critic(lr_actor=1e-3, lr_critic=1e-3, gamma=0.99, n_episodes=1000, MAX
             q_sa_detach, v_s_detach = critic(states_t, actions_t)
             advantages = (q_sa_detach - v_s_detach).squeeze()
 
-        # Policy Gradient Loss
         actor_loss = -(log_probs_t * advantages).mean()
 
         actor_optim.zero_grad()
@@ -183,6 +181,14 @@ def train_critic(lr_actor=1e-3, lr_critic=1e-3, gamma=0.99, n_episodes=1000, MAX
             print(f"Ep {ep:4d} | Avg Reward: {avg_reward:+.3f} | "
                   f"Critic Loss: {critic_loss.item():.4f} | Actor Loss: {actor_loss.item():.4f} | "
                   f"Elapsed: {elapsed:.1f}s")
+            
+            n_hold = sum(a == 0 for a in actions)
+            n_buy  = sum(a == 1 for a in actions)
+            n_sell = sum(a == 2 for a in actions)
+
+            print(
+                f"Ep {ep:4d} | HOLD: {n_hold:3d} | BUY: {n_buy:3d} | SELL: {n_sell:3d}"
+            )
 
     os.makedirs("models", exist_ok=True)
     torch.save(actor.state_dict(),  "models/a2c_actor.pth")
