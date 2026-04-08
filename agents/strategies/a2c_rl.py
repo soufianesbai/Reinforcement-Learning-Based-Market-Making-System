@@ -34,12 +34,11 @@ class ActorNN(nn.Module):
         logits = self.actor_head(features) #scores for each action
         return logits
 
-    def get_action(self, x: torch.Tensor): 
-        """Sample action + return log_prob for training."""
+    def get_action(self, x: torch.Tensor):
         logits = self.forward(x)
-        dist   = torch.distributions.Categorical(logits=logits) #softmax to get probas
-        action = dist.sample() #pick an action in random weighted by the probabilities (exploration)
-        return action, dist.log_prob(action) 
+        dist = torch.distributions.Categorical(logits=logits)
+        action = dist.sample()
+        return action, dist.log_prob(action), dist.entropy()
 
 class CriticNN(nn.Module):
     def __init__(self, state_dim: int = 4, action_dim: int = 3, hidden_dim: int = 128):

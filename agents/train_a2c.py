@@ -108,12 +108,13 @@ def train_critic(lr_actor=1e-2, lr_critic=1e-2, gamma=0.99, n_episodes=500, MAX_
         done = False
         episode_reward = 0
 
-        states, actions, rewards, next_states, log_probs = [], [], [], [], []
+        states, actions, rewards, next_states, log_probs, entropies = [], [], [], [], [], []
 
         while not done:
             state_t = torch.tensor(obs).unsqueeze(0).to(device)
                         
-            action, log_prob = actor.get_action(state_t)
+            action, log_prob, entropy = actor.get_action(state_t)
+            entropies.append(entropy)
             action_idx = action.item()
 
             next_obs, reward, done = env.step(action_idx)
@@ -168,7 +169,11 @@ def train_critic(lr_actor=1e-2, lr_critic=1e-2, gamma=0.99, n_episodes=500, MAX_
             q_sa_detach, v_s_detach = critic(states_t, actions_t)
             advantages = (q_sa_detach - v_s_detach).squeeze()
 
-        actor_loss = -(log_probs_t * advantages).mean()
+        entropies_t = torch.stack(entropies)
+        entropy_coef = 0.05
+
+        actor_loss = (-log_probs_t * advantages + -entropy_coef * entropies_t).mean()
+        # actor_loss = -(log_probs_t * advantages).mean()
 
         actor_optim.zero_grad()
         actor_loss.backward()
