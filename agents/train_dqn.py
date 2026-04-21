@@ -1,3 +1,7 @@
+'''
+The training is realized on the data existing in this link :
+https://data.binance.vision/data/spot/monthly/aggTrades/BTCUSDT/BTCUSDT-aggTrades-2026-03.zip
+'''
 import argparse
 import csv
 import math
