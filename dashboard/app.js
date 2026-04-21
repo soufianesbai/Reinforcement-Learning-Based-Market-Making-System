@@ -397,34 +397,24 @@
 
   async function loadLiveData() {
     try {
-      const [marketRes, tradesRes, perfRes, statusRes, metricsRes, logsRes, chartRes, historyRes] = await Promise.all([
-        fetch("/api/market_state"),
-        fetch("/api/trade_log"),
-        fetch("/api/performance"),
-        fetch("/api/status"),
-        fetch("/api/metrics"),
-        fetch("/api/recent_logs"),
-        fetch("/api/chart"),
-        fetch("/api/history"),
-      ]);
+      const res = await fetch("/api/snapshot");
+      const snap = await res.json();
 
-      const market = await marketRes.json();
-      const trades = await tradesRes.json();
-      const perf = await perfRes.json();
-      const status = await statusRes.json();
-      const metrics = await metricsRes.json();
-      const logs = await logsRes.json();
-      const chart = await chartRes.json();
-      const history = await historyRes.json();
+      const { market, trades, performance: perf, status, metrics, logs, chart, history } = snap;
 
       applyMarketState(market);
       lastMetrics = metrics;
       lastHistory = history;
 
+      const product = document.getElementById("product-select")?.value || "SOLUSDT";
+      const baseAsset = product.replace(/USDT$|BUSD$|BTC$|ETH$|BNB$/, "") || product;
+      const invLabel = document.getElementById("inventory-label");
+      if (invLabel) invLabel.textContent = `Inventory (${baseAsset})`;
+
       renderSidebarMetrics(metrics);
       renderDetailPanel();
 
-      state.tradeLog = Array.isArray(trades.rows) ? trades.rows : [];
+      state.tradeLog = Array.isArray(trades) ? trades : [];
       renderTradeLog();
 
       if (Array.isArray(perf.series) && perf.series.length) {
@@ -444,15 +434,8 @@
         state.priceAxis = Array.isArray(chart.axis) && chart.axis.length ? chart.axis : state.priceAxis;
         drawCandleChart(document.getElementById("candle-chart"), state.candles, state.priceAxis);
         renderChartAnnotations(chart.markers, state.candles);
-
         const tag = document.getElementById("chart-tag");
-        if (tag) {
-          if (!state.candles.length) {
-            tag.textContent = "Waiting for market data";
-          } else if (chart.tag) {
-            tag.textContent = chart.tag;
-          }
-        }
+        if (tag) tag.textContent = chart.tag || "Waiting for market data";
       } else {
         state.candles = [];
         drawCandleChart(document.getElementById("candle-chart"), [], []);
@@ -472,18 +455,12 @@
       const anyRunning = status.market_running || status.agent_running;
 
       if (btn) {
-        if (anyRunning) {
-          btn.textContent = "Running...";
-        } else {
-          btn.textContent = "Start Simulation";
-          btn.disabled = false;
-        }
+        btn.textContent = anyRunning ? "Running..." : "Start Simulation";
+        if (!anyRunning) btn.disabled = false;
       }
       if (stopBtn) stopBtn.disabled = !anyRunning;
 
-      if (!isSwitchingSymbol) {
-        updateStatusPill("market-pill", status.market_running, "Market");
-      }
+      if (!isSwitchingSymbol) updateStatusPill("market-pill", status.market_running, "Market");
       updateStatusPill("agent-pill", status.agent_running, "Agent");
 
       if (status.started_at) setInfo(`Last start: ${status.started_at.replace("T", " ")}`);

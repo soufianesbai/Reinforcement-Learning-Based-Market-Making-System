@@ -36,13 +36,6 @@ window.MarketMindComponents = (function () {
             <span class="topbar-price-label">MID</span>
             <span class="topbar-price-value" id="topbar-price">--</span>
           </div>
-          <nav class="top-menu">
-            <a class="active" href="#">Dashboard</a>
-            <a href="#">Live Market</a>
-            <a href="#">Reports</a>
-          </nav>
-          <button class="btn">Login</button>
-          <button class="btn btn-sign">Sign Up</button>
         </div>
       </header>
     `;
@@ -54,7 +47,7 @@ window.MarketMindComponents = (function () {
         <div class="stat-card active" data-panel="inventory">
           <div class="stat-card-icon">📦</div>
           <div class="stat-card-body">
-            <span class="stat-card-label">Inventory (SOL)</span>
+            <span class="stat-card-label" id="inventory-label">Inventory</span>
             <span class="stat-card-value" id="side-inventory">--</span>
           </div>
         </div>

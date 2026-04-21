@@ -1,4 +1,3 @@
-RESET_MODE = False
 #!/usr/bin/env python3
 import json
 import os
@@ -285,25 +284,114 @@ def read_performance(limit: int = 30):
     return {"series": series, "ticks": ticks}
 
 
+def read_snapshot():
+    """Single endpoint returning all dashboard data — replaces 8 parallel requests."""
+    if _reset_in_progress:
+        empty_chart = {"candles": [], "axis": [], "markers": [],
+                       "tag": "Waiting for market data", "symbol": process_state["product"]}
+        empty_market = {"ok": False, "message": "reset in progress", "symbol": process_state["product"]}
+        with state_lock:
+            status = {
+                "market_running": process_alive(process_state["market"]),
+                "agent_running": process_alive(process_state["agent"]),
+                "product": process_state["product"],
+                "agent": process_state["agent_name"],
+                "last_error": process_state["last_error"],
+                "started_at": process_state["started_at"],
+            }
+        return {"market": empty_market, "trades": [], "performance": {"series": [], "ticks": []},
+                "status": status, "metrics": {"cash": None, "inventory": None, "trade_count": 0},
+                "logs": {"agent": [], "market": []}, "chart": empty_chart,
+                "history": {"trades": 0, "wins": 0, "losses": 0, "net": 0.0, "win_rate": 0.0}}
+
+    market = read_market_state()
+    market["symbol"] = process_state["product"]
+
+    all_trades = read_trade_log(limit=300)
+    trade_log = all_trades[-25:]
+
+    wins = len([r for r in all_trades if r["result"] > 0])
+    losses = len([r for r in all_trades if r["result"] < 0])
+    total = len(all_trades)
+    history = {
+        "trades": total,
+        "wins": wins,
+        "losses": losses,
+        "net": round(sum(r["result"] for r in all_trades), 2),
+        "win_rate": round((wins / total) * 100, 2) if total else 0.0,
+    }
+
+    candles = list(chart_state["candles"])
+    if chart_state["current"] is not None:
+        candles = candles + [chart_state["current"]]
+    markers = [
+        {"label": f"{r['action']} Order", "side": r["action"].lower(), "time": r["time"]}
+        for r in all_trades[-6:]
+    ]
+    if candles:
+        prices = [c["h"] for c in candles] + [c["l"] for c in candles]
+        lo, hi = min(prices), max(prices)
+        pad = max(0.6, (hi - lo) * 0.15)
+        step = max(0.5, (hi - lo + 2 * pad) / 5)
+        axis = [round((lo - pad) + i * step, 1) for i in range(6)]
+        last = candles[-1]
+        chart = {
+            "candles": candles[-24:], "axis": axis, "markers": markers,
+            "tag": f"Vol: {last['v']} | ${last['c']:.2f}  {last['t']}",
+            "symbol": process_state["product"],
+        }
+    else:
+        chart = {"candles": [], "axis": [], "markers": [],
+                 "tag": "Waiting for market data", "symbol": process_state["product"]}
+
+    with state_lock:
+        perf = {"series": list(perf_state["series"][-30:]), "ticks": list(perf_state["ticks"][-30:])}
+        status = {
+            "market_running": process_alive(process_state["market"]),
+            "agent_running": process_alive(process_state["agent"]),
+            "product": process_state["product"],
+            "agent": process_state["agent_name"],
+            "last_error": process_state["last_error"],
+            "started_at": process_state["started_at"],
+        }
+
+    return {
+        "market": market,
+        "trades": trade_log,
+        "performance": perf,
+        "status": status,
+        "metrics": read_runtime_metrics(),
+        "logs": {"agent": tail_file(AGENT_LOG_FILE, 60), "market": tail_file(MARKET_LOG_FILE, 60)},
+        "chart": chart,
+        "history": history,
+    }
+
+
 def read_runtime_metrics():
     latest_cash = None
     latest_inventory = None
     trades = 0
 
-    if AGENT_LOG_FILE.exists():
-        with AGENT_LOG_FILE.open("r", encoding="utf-8", errors="ignore") as f:
-            for raw in f:
-                line = strip_ansi(raw)
-                cash_match = CASH_RE.search(line)
-                if cash_match:
-                    latest_cash = float(cash_match.group(1))
+    if not AGENT_LOG_FILE.exists():
+        return {"cash": None, "inventory": None, "trade_count": 0}
 
-                inv_match = INVENTORY_RE.search(line)
-                if inv_match:
-                    latest_inventory = float(inv_match.group(1))
+    with AGENT_LOG_FILE.open("rb") as f:
+        # Count trades with a full scan (unavoidable), but read tail for cash/inventory
+        content = f.read()
 
-                if ORDER_RE.search(line):
-                    trades += 1
+    text = content.decode("utf-8", errors="ignore")
+    trades = len(ORDER_RE.findall(text))
+
+    # Only scan last 8 KB for cash/inventory (always in recent lines)
+    tail = content[-8192:].decode("utf-8", errors="ignore")
+    for line in tail.splitlines():
+        line = strip_ansi(line)
+        m = CASH_RE.search(line)
+        if m:
+            latest_cash = float(m.group(1))
+        m = INVENTORY_RE.search(line)
+        if m:
+            latest_inventory = float(m.group(1))
 
     return {
         "cash": latest_cash,
@@ -350,8 +438,10 @@ def start_agent(agent_name: str, product: str):
         )
 
 
+_reset_in_progress = False
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
-    reset_in_progress = False
     def _send_json(self, payload, status=200):
         data = json.dumps(payload).encode("utf-8")
         self.send_response(status)
@@ -385,13 +475,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         # Endpoint pour vérifier si le reset est en cours
+        if path == "/api/snapshot":
+            self._send_json(read_snapshot())
+            return
+
         if path == "/api/reset_status":
-            self._send_json({"reset": self.reset_in_progress})
+            self._send_json({"reset": _reset_in_progress})
             return
 
         if path == "/api/market_state":
             # Si reset en cours, renvoyer un état vide/tag Waiting
-            if self.reset_in_progress:
+            if _reset_in_progress:
                 self._send_json({
                     "ok": False,
                     "message": "market_state.json not ready",
@@ -413,7 +507,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if path == "/api/chart":
             # Si reset en cours, renvoyer un chart vide/tag Waiting
-            if self.reset_in_progress:
+            if _reset_in_progress:
                 self._send_json({
                     "candles": [],
                     "axis": [],
@@ -460,41 +554,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if path == "/api/clear_logs":
-            RESET_MODE = True
-            cleared = []
-            # Stopper le process market (LiveMarketData) pour éviter toute écriture résiduelle
-            with state_lock:
-                if process_alive(process_state["market"]):
-                    kill_process_group(process_state["market"])
-                    process_state["market"] = None
-            for log_path in [AGENT_LOG_FILE, MARKET_LOG_FILE]:
-                try:
-                    if log_path.exists():
-                        log_path.write_text("", encoding="utf-8")
-                        cleared.append(log_path.name)
-                except OSError as e:
-                    self._send_json({"ok": False, "message": str(e)}, status=500)
-                    return
-            # Supprimer le fichier market_state.json pour forcer un état vide
-            try:
-                if MARKET_STATE_FILE.exists():
-                    MARKET_STATE_FILE.unlink()
-            except Exception:
-                pass
-            with state_lock:
-                chart_state["candles"] = []
-                chart_state["current"] = None
-                chart_state["tick"] = 0
-                chart_state["markers"] = []
-                chart_state["last_mid"] = None
-                chart_state["symbol"] = process_state["product"]
-                perf_state["baseline_equity"] = None
-                perf_state["series"] = []
-                perf_state["ticks"] = []
-            self._send_json({"ok": True, "cleared": cleared})
-            return
-
         if path in ["/", "/index.html"]:
             self._serve_file("index.html")
             return
@@ -502,11 +561,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self._serve_file(path.lstrip("/"))
 
     def do_POST(self):
-        global RESET_MODE
+        global _reset_in_progress
         parsed = urlparse(self.path)
 
         if parsed.path == "/api/clear_logs":
-            self.reset_in_progress = True
+            _reset_in_progress = True
             cleared = []
             # Stopper le process market (LiveMarketData) pour éviter toute écriture résiduelle
             with state_lock:
@@ -520,7 +579,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         cleared.append(log_path.name)
                 except OSError as e:
                     self._send_json({"ok": False, "message": str(e)}, status=500)
-                    self.reset_in_progress = False
+                    _reset_in_progress = False
                     return
             # Supprimer le fichier market_state.json pour forcer un état vide
             try:
@@ -547,12 +606,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     break
                 time.sleep(0.1)
                 waited += 0.1
-            self.reset_in_progress = False
+            _reset_in_progress = False
             self._send_json({"ok": True, "cleared": cleared})
             return
 
         if parsed.path == "/api/start_simulation":
-            RESET_MODE = True
             try:
                 content_len = int(self.headers.get("Content-Length", "0") or "0")
                 body = self.rfile.read(content_len).decode("utf-8") if content_len else "{}"
@@ -628,7 +686,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_error(404, "Not found")
 
 
-def run_server(port: int = 8000):
+def run_server(port: int = 8090):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer(("127.0.0.1", port), DashboardHandler)
     print(f"MarketMind dashboard server running: http://127.0.0.1:{port}")
