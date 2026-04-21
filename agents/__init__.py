@@ -9,6 +9,11 @@ from .engine import MarketMakerEngine
 
 # Optionnel : Exposer les stratégies directement
 from .strategies.sma import SMAStrategy
+from .strategies.dqn_agent import DQNStrategy as NormalDQNStrategy
+from .strategies.dqn_agent_faster import DQNStrategy as FastDQNStrategy
+
+# Backward-compatible default alias: keep the faster version as the package-level DQNStrategy.
+DQNStrategy = FastDQNStrategy
 # from .strategies.rl_agent import RLAgentStrategy
 #from .strategies.a2c_rl import A2CStrategy
 
@@ -20,5 +25,7 @@ __all__ = [
     "StrategySignal",
     "MarketMakerEngine",
     "SMAStrategy",
-    "PPOStrategy"
+    "NormalDQNStrategy",
+    "FastDQNStrategy",
+    "DQNStrategy",
 ]

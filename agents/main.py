@@ -2,6 +2,7 @@
 from .engine import MarketMakerEngine
 from .strategies.sma import SMAStrategy  
 from .strategies.random_coin import RandomStrategy
+from .strategies.dqn_agent_faster import DQNStrategy
 from .strategies.PPO_agent import PPOStrategy
 # from .strategies.rl_agent import RLAgentStrategy
 
@@ -25,8 +26,9 @@ def main():
     # 4. Lancement
     #engine.run(duration_seconds=180)
 
-    #strategy = RandomStrategy()    
-    strategy = PPOStrategy(symbol="SOLUSDT", policy_model_path="agents/models_checkpoints/ppo_policy_FINAL.keras")
+    #strategy = RandomStrategy() 
+    #strategy = PPOStrategy(symbol="SOLUSDT", policy_model_path="agents/models_checkpoints/ppo_policy_FINAL.keras")   
+    strategy = DQNStrategy(symbol="SOLUSDT", model_path="models/dqn_agent.pth")
     engine = MarketMakerEngine(strategy=strategy, symbol="SOLUSDT")
     engine.run(duration_seconds=180)
 
