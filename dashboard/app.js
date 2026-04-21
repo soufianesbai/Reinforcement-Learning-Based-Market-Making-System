@@ -282,7 +282,7 @@
         items: [
           ["USDT Balance", (lastMetrics.cash != null && !isNaN(lastMetrics.cash)) ? `$${fmt(lastMetrics.cash)}` : "--"],
           ["Net PnL", (lastHistory.net != null && !isNaN(lastHistory.net)) ? `${lastHistory.net >= 0 ? "+" : "-"}$${Math.abs(lastHistory.net).toFixed(2)}` : "--"],
-          ["Win Rate", (lastHistory.win_rate != null && !isNaN(lastHistory.win_rate)) ? `${lastHistory.win_rate.toFixed(2)}%` : "--"],
+          ["Sell Ratio", (lastHistory.sell_ratio != null && !isNaN(lastHistory.sell_ratio)) ? `${lastHistory.sell_ratio.toFixed(1)}%` : "--"],
           ["Trades", (lastHistory.trades != null && !isNaN(lastHistory.trades)) ? `${lastHistory.trades}` : "--"],
         ],
       },
@@ -290,9 +290,9 @@
         title: "History Details",
         items: [
           ["Total Trades", (lastHistory.trades != null && !isNaN(lastHistory.trades)) ? `${lastHistory.trades}` : "--"],
-          ["Wins", (lastHistory.wins != null && !isNaN(lastHistory.wins)) ? `${lastHistory.wins}` : "--"],
-          ["Losses", (lastHistory.losses != null && !isNaN(lastHistory.losses)) ? `${lastHistory.losses}` : "--"],
-          ["Net Result", (lastHistory.net != null && !isNaN(lastHistory.net)) ? `${lastHistory.net >= 0 ? "+" : "-"}$${Math.abs(lastHistory.net).toFixed(2)}` : "--"],
+          ["Buys", (lastHistory.buys != null && !isNaN(lastHistory.buys)) ? `${lastHistory.buys}` : "--"],
+          ["Sells", (lastHistory.sells != null && !isNaN(lastHistory.sells)) ? `${lastHistory.sells}` : "--"],
+          ["Net Cash Flow", (lastHistory.net != null && !isNaN(lastHistory.net)) ? `${lastHistory.net >= 0 ? "+" : "-"}$${Math.abs(lastHistory.net).toFixed(2)}` : "--"],
         ],
       },
     };

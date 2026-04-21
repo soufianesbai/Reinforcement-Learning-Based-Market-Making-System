@@ -91,7 +91,7 @@ def tail_file(path: Path, line_limit: int = 80) -> list[str]:
     return [strip_ansi(line.rstrip("\n")) for line in lines[-line_limit:]]
 
 
-def read_market_state():
+def read_market_state(metrics=None):
     if not MARKET_STATE_FILE.exists():
         return {
             "ok": False,
@@ -128,7 +128,8 @@ def read_market_state():
                 chart_state["last_mid"] = mid
                 chart_state["symbol"] = symbol
             # -----------------------------------------------------------------------
-            metrics = read_runtime_metrics()
+            if metrics is None:
+                metrics = read_runtime_metrics()
             cash = metrics.get("cash")
             inventory = metrics.get("inventory")
             if cash is not None and inventory is not None:
@@ -304,21 +305,22 @@ def read_snapshot():
                 "logs": {"agent": [], "market": []}, "chart": empty_chart,
                 "history": {"trades": 0, "wins": 0, "losses": 0, "net": 0.0, "win_rate": 0.0}}
 
-    market = read_market_state()
+    metrics = read_runtime_metrics()
+    market = read_market_state(metrics=metrics)
     market["symbol"] = process_state["product"]
 
     all_trades = read_trade_log(limit=300)
     trade_log = all_trades[-25:]
 
-    wins = len([r for r in all_trades if r["result"] > 0])
-    losses = len([r for r in all_trades if r["result"] < 0])
+    buys = len([r for r in all_trades if r["action"] == "Buy"])
+    sells = len([r for r in all_trades if r["action"] == "Sell"])
     total = len(all_trades)
     history = {
         "trades": total,
-        "wins": wins,
-        "losses": losses,
+        "buys": buys,
+        "sells": sells,
         "net": round(sum(r["result"] for r in all_trades), 2),
-        "win_rate": round((wins / total) * 100, 2) if total else 0.0,
+        "sell_ratio": round((sells / total) * 100, 2) if total else 0.0,
     }
 
     candles = list(chart_state["candles"])
@@ -360,7 +362,7 @@ def read_snapshot():
         "trades": trade_log,
         "performance": perf,
         "status": status,
-        "metrics": read_runtime_metrics(),
+        "metrics": metrics,
         "logs": {"agent": tail_file(AGENT_LOG_FILE, 60), "market": tail_file(MARKET_LOG_FILE, 60)},
         "chart": chart,
         "history": history,
@@ -598,7 +600,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 perf_state["series"] = []
                 perf_state["ticks"] = []
             # Attente active : vérifier que les fichiers sont bien vides/supprimés
-            import time
             max_wait = 5.0
             waited = 0.0
             while waited < max_wait:
@@ -672,10 +673,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/stop_simulation":
             try:
                 with state_lock:
-                    kill_process_group(process_state["market"])
-                    kill_process_group(process_state["agent"])
+                    market_proc = process_state["market"]
+                    agent_proc = process_state["agent"]
                     process_state["market"] = None
                     process_state["agent"] = None
+                kill_process_group(market_proc)
+                kill_process_group(agent_proc)
                 self._send_json({"ok": True, "message": "Simulation stopped"})
             except Exception as exc:
                 with state_lock:
