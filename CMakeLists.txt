@@ -65,9 +65,17 @@ set(CURL_DISABLE_LDAPS ON CACHE BOOL "" FORCE)
 if(WIN32)
     set(CURL_USE_SCHANNEL ON CACHE BOOL "Use Windows native SSL" FORCE)
     set(CMAKE_USE_SCHANNEL ON CACHE BOOL "" FORCE)
+        set(CURL_USE_SECTRANSP OFF CACHE BOOL "Use Apple Secure Transport" FORCE)
+        set(CURL_USE_OPENSSL OFF CACHE BOOL "Use OpenSSL" FORCE)
+elseif(APPLE)
+        set(CURL_USE_SCHANNEL OFF CACHE BOOL "Use Windows native SSL" FORCE)
+        set(CMAKE_USE_SCHANNEL OFF CACHE BOOL "" FORCE)
+        set(CURL_USE_SECTRANSP ON CACHE BOOL "Use Apple Secure Transport" FORCE)
+        set(CURL_USE_OPENSSL OFF CACHE BOOL "Use OpenSSL" FORCE)
 else()
     set(CURL_USE_SCHANNEL OFF CACHE BOOL "" FORCE)
     set(CMAKE_USE_SCHANNEL OFF CACHE BOOL "" FORCE)
+        set(CURL_USE_SECTRANSP OFF CACHE BOOL "Use Apple Secure Transport" FORCE)
     set(CURL_USE_OPENSSL ON CACHE BOOL "Use OpenSSL" FORCE)
 endif()
 
@@ -78,7 +86,6 @@ add_executable(LiveMarketData
         src/LiveMarketData/Main.cpp
         src/LiveMarketData/Fetcher.cpp
         src/LiveMarketData/Parser.cpp
-        src/LiveMarketData/AgentOrders.cpp
         src/LiveMarketData/Display.cpp
         ${SOURCES}
 )
