@@ -19,7 +19,7 @@ class PPOStrategy(BaseStrategy):
         # Limites du Market Maker
         self.inventory = 0 
         self.max_inventory = 10 
-        self.max_spread_pct = 0.0005 
+        self.max_spread_pct = 0.005 
 
         self.next_side_to_quote = Side.BUY
         

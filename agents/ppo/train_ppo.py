@@ -65,8 +65,8 @@ class ContinuousBinanceEnv(gym.Env):
         self.window_size = window_size
         
         # LIMITES DU MARKET MAKER 
-        self.max_inventory = 10 # L'agent ne peut pas détenir plus de 10 SOL
-        self.max_spread_pct = 0.005 # Écartement maximum autorisé est 0.5%
+        self.max_inventory = 3 # L'agent ne peut pas détenir plus de 10 SOL
+        self.max_spread_pct = 0.01 # Écartement maximum autorisé est 0.5%
         
         total_candles = len(self.closes)
 
@@ -109,7 +109,10 @@ class ContinuousBinanceEnv(gym.Env):
         # Remet le compteur à zero
         self.inventory = 0
         self.cash = 0.0
-        self.old_portfolio_value = 0.0
+        self.old_cash = 0.0
+        self.episode_trades = 0
+        self.episode_inventories = []
+
         return self._get_obs(), {}
 
     # Prépare les données vues par l'agent.
@@ -136,59 +139,59 @@ class ContinuousBinanceEnv(gym.Env):
         return obs.astype(np.float32)
 
     # LECTURE DES ACTIONS DE l'agent AU TEMPS T
-    def step(self, action):     
-        current_price = self.closes[self.current_step]
-        
-        # On convertit les actions [-1, 1] en pourcentages d'écartement [0%, 0.5%]
-        ask_distance_pct = (action[0] + 1.0) / 2.0 * self.max_spread_pct
-        bid_distance_pct = (action[1] + 1.0) / 2.0 * self.max_spread_pct
-
-        # Calcule du prix exacts des ordres
-        agent_ask_price = current_price * (1.0 + ask_distance_pct)
+    def step(self, action):                                                                                                               
+        current_price = self.closes[self.current_step]                                                                                    
+                                                                                                                                            
+        ask_distance_pct = (action[0] + 1.0) / 2.0 * self.max_spread_pct                                                                  
+        bid_distance_pct = (action[1] + 1.0) / 2.0 * self.max_spread_pct                                                                  
+                                                                                                                                            
+        agent_ask_price = current_price * (1.0 + ask_distance_pct)                                                                        
         agent_bid_price = current_price * (1.0 - bid_distance_pct)
-
-        # Avance d'une étape dans le temps (T + 1)
-        self.current_step += 1
-        
-        next_high = self.highs[self.current_step]
+                                                                                                                                            
+        self.current_step += 1                                                                                                            
+    
+        next_high = self.highs[self.current_step]                                                                                         
         next_low = self.lows[self.current_step]
-        next_close = self.closes[self.current_step]
+        next_close = self.closes[self.current_step]                                                                                       
 
-        # SIMULATION DU CARNET D'ORDRES 
+        filled = False                                                                                                                                                                                                                                                        
+        if np.random.random() < 0.5:
+            # Vérifie le bid d'abord                                                                                                          
+            if next_low <= agent_bid_price and self.inventory < self.max_inventory:
+                self.inventory += 1                                                                                                           
+                self.cash -= agent_bid_price
+                self.episode_trades += 1                                                                                                      
+                filled = True
+            if not filled and next_high >= agent_ask_price and self.inventory > -self.max_inventory:                                          
+                self.inventory -= 1                                                                                                           
+                self.cash += agent_ask_price                                                                                                  
+                self.episode_trades += 1                                                                                                      
+        else:           
+            # Vérifie le ask d'abord
+            if next_high >= agent_ask_price and self.inventory > -self.max_inventory:
+                self.inventory -= 1                                                                                                           
+                self.cash += agent_ask_price
+                self.episode_trades += 1                                                                                                      
+                filled = True
+            if not filled and next_low <= agent_bid_price and self.inventory < self.max_inventory:
+                self.inventory += 1                                                                                                           
+                self.cash -= agent_bid_price
+                self.episode_trades += 1 
 
-        # Si le marché chute (Low <= Bid), on achète 1 SOL.
-        if next_low <= agent_bid_price and self.inventory < self.max_inventory:
-            self.inventory += 1
-            self.cash -= agent_bid_price 
+        self.episode_inventories.append(self.inventory)
 
-        # Si le marché monte (High >= Ask), on vend 1 SOL
-        if next_high >= agent_ask_price and self.inventory > -self.max_inventory:
-            self.inventory -= 1
-            self.cash += agent_ask_price 
+        spread_reward = self.cash - self.old_cash                                                                                         
+        self.old_cash = self.cash
+                                                                                                                                            
+        inventory_penalty = 0.0005 * (self.inventory ** 2) * next_close 
 
-        # Calcul de la récompense 
-        current_portfolio_value = self.cash + (self.inventory * next_close)
-        
-        # PnL du step
-        step_pnl = current_portfolio_value - self.old_portfolio_value
-        
-        # Pénalité d'inventaire (Plus on s'éloigne de 0, plus ça coûte cher)
-        # Multiplié par le prix actuel pour que la pénalité soit à la même échelle que le PnL
-        inventory_penalty = 0.0001 * (self.inventory ** 2) * next_close 
-        
-        # Récompense finale = Profit - Risque.
-        reward = step_pnl - inventory_penalty
-        
-        # Bloque les valeurs extrêmes 
+        reward = spread_reward - inventory_penalty
         reward = np.clip(reward, -10.0, 10.0)
-
-        # Mise à jour pour le prochain tour
-        self.old_portfolio_value = current_portfolio_value
+                                                                                                                                            
         self.steps_this_episode += 1
-        terminated = self.steps_this_episode >= self.max_steps
-
+        terminated = self.steps_this_episode >= self.max_steps                                                                            
+                    
         return self._get_obs(), float(reward), terminated, False, {}
-
 
 # RÉSEAUX DE NEURONES
 def build_policy_network(input_shape):  # Le cerveau
@@ -227,7 +230,11 @@ class PPOAgent:
         self.batch_size = batch_size
         self.lambda_ = lambda_
         self.entropy_coeff = entropy_coeff
+
         self.losses = []
+        self.policy_losses = []
+        self.value_losses = []
+        self.entropy_losses = []
 
     def act(self, state, explore=True):
         state_t = np.expand_dims(state, axis=0)
@@ -277,6 +284,54 @@ class PPOAgent:
         returns = tf.cast(returns, tf.float32)
         
         old_log_probs = self._log_prob(old_mus, actions, self.log_std)
+
+        epoch_policy_losses = []                                                                                                          
+        epoch_value_losses = []
+        epoch_entropy_losses = []
+
+
+        n = len(states)                                                                                                                   
+        for _ in range(self.epochs):
+            indices = np.random.permutation(n)                                                                                            
+            for start in range(0, n, self.batch_size):
+                idx = indices[start:start + self.batch_size]                                                                              
+    
+                b_states = tf.gather(states, idx)                                                                                         
+                b_actions = tf.gather(actions, idx)
+                b_old_log_probs = tf.gather(old_log_probs, idx)                                                                           
+                b_advantages = tf.gather(advantages, idx)
+                b_returns = tf.gather(returns, idx)                                                                                       
+                                                                                                                                            
+                with tf.GradientTape() as tape:
+                    new_mus = self.policy_network(b_states, training=True)                                                                
+                    new_log_probs = self._log_prob(new_mus, b_actions, self.log_std)
+                                                                                                                                            
+                    ratio = tf.exp(new_log_probs - b_old_log_probs)
+                    clipped = tf.clip_by_value(ratio, 1 - self.clip_range, 1 + self.clip_range)                                           
+                    policy_loss = -tf.reduce_mean(tf.minimum(ratio * b_advantages, clipped * b_advantages))                               
+                                                                                                                                            
+                    clipped_log_std = tf.clip_by_value(self.log_std, -10.0, 0.0)                                                          
+                    entropy = 0.5 * tf.reduce_sum(1.0 + tf.math.log(2 * np.pi * tf.exp(clipped_log_std * 2)))                             
+                    entropy_loss = -self.entropy_coeff * tf.reduce_mean(entropy)                                                          
+                    
+                    value_preds = tf.squeeze(self.value_network(b_states, training=True))                                                 
+                    value_loss = tf.reduce_mean(tf.square(b_returns - value_preds))
+                                                                                                                                            
+                    loss = policy_loss + 0.5 * value_loss + entropy_loss                                                                  
+    
+                all_vars = self.policy_network.trainable_variables + self.value_network.trainable_variables + [self.log_std]              
+                grads = tape.gradient(loss, all_vars)
+                grads = [tf.clip_by_norm(g, 0.5) if g is not None else g for g in grads]                                                  
+                self.optimizer.apply_gradients(zip(grads, all_vars))                                                                      
+                                                                                                                                            
+                epoch_policy_losses.append(float(policy_loss))                                                                            
+                epoch_value_losses.append(float(value_loss))                                                                              
+                epoch_entropy_losses.append(float(entropy_loss))
+
+        self.policy_losses.append(np.mean(epoch_policy_losses))                                                                           
+        self.value_losses.append(np.mean(epoch_value_losses))
+        self.entropy_losses.append(np.mean(epoch_entropy_losses))                                                                         
+        self.losses.append(np.mean(epoch_policy_losses) + 0.5 * np.mean(epoch_value_losses) + np.mean(epoch_entropy_losses))
 
         n = len(states)
         for _ in range(self.epochs):
@@ -333,9 +388,12 @@ if __name__ == "__main__":
     agent = PPOAgent(env=env, policy_network=policy_net, value_network=value_net,
                      learning_rate=3e-4, entropy_coeff=0.01)
 
-    num_episodes = 1000
+    num_episodes = 2000
 
     episode_scores = []
+    episode_trades = []
+    episode_avg_inventories = []
+    episode_stds = []
 
     print("Début de l'entraînement")
     for episode in range(num_episodes):
@@ -364,22 +422,28 @@ if __name__ == "__main__":
             np.array(rewards), np.array(next_states), np.array(dones)
         )
 
-        last_loss = agent.losses[-1] if agent.losses else 0.0
-        
-        # On affiche la moyenne des deux écart-types
-        current_stds = tf.exp(agent.log_std).numpy()
+        current_stds = tf.exp(agent.log_std).numpy()                                                                                  
         mean_std = np.mean(current_stds)
-        
-        print(f"Épisode {episode + 1}/{num_episodes} | Score: {episode_reward:.2f} | Loss: {last_loss:.4f} | Mean Std: {mean_std:.4f}")
-
+                                                                                                                                      
         episode_scores.append(episode_reward)
+        episode_trades.append(env.episode_trades)
+        avg_inv = np.mean(np.abs(env.episode_inventories)) if env.episode_inventories else 0.0                                        
+        episode_avg_inventories.append(avg_inv)
+        episode_stds.append(mean_std)                                                                                                 
+                
+        print(f"Épisode {episode + 1}/{num_episodes} | "                                                                              
+              f"Score: {episode_reward:.2f} | "
+              f"Trades: {env.episode_trades} | "                                                                                      
+              f"Inv moy: {avg_inv:.2f} | "
+              f"Loss: {agent.losses[-1]:.4f} | "                                                                                      
+              f"Std: {mean_std:.4f}")                                                                                                 
 
-        if (episode + 1) % 50 == 0:
+        if (episode + 1) % 50 == 0:                                                                                                   
             os.makedirs("models_checkpoints", exist_ok=True)
-            agent.save(
+            agent.save(                                                                                                               
                 f"models_checkpoints/ppo_policy_ep{episode+1}.keras",
-                f"models_checkpoints/ppo_value_ep{episode+1}.keras"
-            )  
+                f"models_checkpoints/ppo_value_ep{episode+1}.keras"                                                                   
+            )                                     
     
     print("Entraînement terminé...")
         
@@ -388,20 +452,69 @@ if __name__ == "__main__":
         "models_checkpoints/ppo_value_FINAL.keras"
     )
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(episode_scores, label="Score par épisode", color="blue", alpha=0.6)
-    
-    if len(episode_scores) >= 50:
-        moving_avg = pd.Series(episode_scores).rolling(window=50).mean()
-        plt.plot(moving_avg, label="Moyenne mobile (50 ep)", color="red", linewidth=2)
+    # ==========================================                                                                                      
+    # GRAPHIQUES DE CONVERGENCE
+    # ==========================================                                                                                      
+    smooth = lambda data, w=50: pd.Series(data).rolling(window=w, min_periods=1).mean()
+                                                                                                                                      
+    fig, axes = plt.subplots(3, 2, figsize=(16, 14))                                                                                  
+    fig.suptitle("Métriques d'Entraînement PPO — Market Maker", fontsize=15, fontweight="bold")                                       
+                                                                                                                                      
+    ax = axes[0, 0]                                                                                                                   
+    ax.plot(episode_scores, alpha=0.3, color="blue", label="Score brut")                                                              
+    ax.plot(smooth(episode_scores), color="red", linewidth=2, label="Moyenne mobile (50 ep)")                                         
+    ax.axhline(y=0, color="black", linestyle="--", alpha=0.3)                                                                         
+    ax.set_title("Score (Récompense) par Épisode")
+    ax.set_xlabel("Épisodes")                                                                                                         
+    ax.set_ylabel("Score")
+    ax.legend()                                                                                                                       
+    ax.grid(True, alpha=0.3)
+                                                                                                                                      
+    ax = axes[0, 1]
+    ax.plot(agent.losses, alpha=0.3, color="purple")
+    ax.plot(smooth(agent.losses), color="purple", linewidth=2, label="Loss totale")
+    ax.set_title("Loss Totale")                                                                                                       
+    ax.set_xlabel("Épisodes")
+    ax.set_ylabel("Loss")                                                                                                             
+    ax.legend() 
+    ax.grid(True, alpha=0.3)                                                                                                          
 
-    plt.title("Évolution du Score ")
-    plt.xlabel("Épisodes")
-    plt.ylabel("Score (Récompense)")
-    plt.legend()
-    plt.grid(True)
-    
-    plt.savefig("courbe_apprentissage.png")
-    print("Courbe sauvegardée sous le nom 'courbe_apprentissage.png'")
-    
+    ax = axes[1, 0]                                                                                                                   
+    ax.plot(smooth(agent.policy_losses), color="orange", linewidth=2, label="Policy Loss")
+    ax.plot(smooth(agent.value_losses), color="green", linewidth=2, label="Value Loss")
+    ax.plot(smooth(agent.entropy_losses), color="red", linewidth=2, label="Entropy Loss")                                             
+    ax.set_title("Décomposition des Losses")
+    ax.set_xlabel("Épisodes")                                                                                                         
+    ax.set_ylabel("Loss")
+    ax.legend()                                                                                                                       
+    ax.grid(True, alpha=0.3)
+    ax = axes[1, 1]
+    ax.plot(episode_trades, alpha=0.3, color="teal")
+    ax.plot(smooth(episode_trades), color="teal", linewidth=2, label="Trades / épisode")                                              
+    ax.set_title("Activité de Trading")
+    ax.set_xlabel("Épisodes")                                                                                                         
+    ax.set_ylabel("Nombre de Trades")                                                                                                 
+    ax.legend()
+    ax.grid(True, alpha=0.3)                                                                                                          
+                
+    ax = axes[2, 0]
+    ax.plot(episode_avg_inventories, alpha=0.3, color="brown")
+    ax.plot(smooth(episode_avg_inventories), color="brown", linewidth=2, label="Inventaire moyen (|inv|)")                            
+    ax.set_title("Gestion de l'Inventaire")
+    ax.set_xlabel("Épisodes")                                                                                                         
+    ax.set_ylabel("Inventaire Absolu Moyen")
+    ax.legend()                                                                                                                       
+    ax.grid(True, alpha=0.3)
+    ax = axes[2, 1]                                                                                                                   
+    ax.plot(episode_stds, color="magenta", linewidth=2, label="Mean Std (exploration)")
+    ax.set_title("Niveau d'Exploration (σ)")                                                                                          
+    ax.set_xlabel("Épisodes")
+    ax.set_ylabel("Écart-type moyen")                                                                                                 
+    ax.legend()
+    ax.grid(True, alpha=0.3)                                                                                                          
+                
+    plt.tight_layout()
+    plt.savefig("courbe_apprentissage.png", dpi=150, bbox_inches="tight")
+    print("Courbes sauvegardées sous 'courbe_apprentissage.png'")                                                                     
     plt.show()
+
