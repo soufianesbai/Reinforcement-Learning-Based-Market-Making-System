@@ -33,48 +33,61 @@
     `;
   }
 
-  function drawCandleChart(svg, candles, axisValues) {
+  function drawCandleChart(svg, candles) {
     if (!svg) return;
+
     if (!Array.isArray(candles) || candles.length === 0) {
-      svg.innerHTML = "";
+      svg.innerHTML = '<text x="390" y="148" fill="#9fb3d1" font-size="13" text-anchor="middle">Waiting for market data...</text>';
       return;
     }
 
-    const W = 780;
-    const H = 290;
-    const left = 14;
-    const right = 58;
-    const top = 10;
-    const innerW = W - left - right;
-    const innerH = H - top - 20;
+    const W = 780, H = 290;
+    const m = { top: 14, right: 68, bottom: 26, left: 10 };
+    const cW = W - m.left - m.right;
+    const cH = H - m.top - m.bottom;
 
-    const highs = candles.map((c) => c.h);
-    const lows = candles.map((c) => c.l);
-    const min = Math.min(...lows) - 0.1;
-    const max = Math.max(...highs) + 0.1;
-    const range = (max - min) || 1;
-    const y = (price) => top + ((max - price) / range) * innerH;
-    const xStep = innerW / candles.length;
+    const dataMax = Math.max(...candles.map((c) => c.h));
+    const dataMin = Math.min(...candles.map((c) => c.l));
+    const priceSpan = dataMax - dataMin || 1;
+    const vPad = priceSpan * 0.1;
+    const yMax = dataMax + vPad;
+    const yMin = dataMin - vPad;
+    const ySpan = yMax - yMin;
+
+    const toY = (p) => m.top + (1 - (p - yMin) / ySpan) * cH;
+    const slot = cW / candles.length;
+    const toX = (i) => m.left + slot * i + slot / 2;
+    const barW = Math.max(2, Math.floor(slot * 0.55));
 
     let html = "";
+
+    // Y grid + labels (6 lines)
     for (let i = 0; i <= 5; i++) {
-      const gy = top + (innerH / 5) * i;
-      html += `<line x1="${left}" y1="${gy}" x2="${W - right}" y2="${gy}" stroke="rgba(159,179,209,0.16)" stroke-width="1"/>`;
-      const price = max - (i / 5) * (max - min);
-      html += `<text x="${W - right + 8}" y="${gy + 4}" fill="#9fb3d1" font-size="10">${price.toFixed(2)}</text>`;
+      const price = yMax - (i / 5) * ySpan;
+      const gy = toY(price);
+      html += `<line x1="${m.left}" y1="${gy}" x2="${W - m.right}" y2="${gy}" stroke="rgba(159,179,209,0.13)" stroke-width="1"/>`;
+      html += `<text x="${W - m.right + 6}" y="${gy}" fill="#9fb3d1" font-size="10" dominant-baseline="middle">${price.toFixed(2)}</text>`;
     }
 
+    // X time labels — show at most 6 evenly distributed
+    const labelStep = Math.max(1, Math.floor(candles.length / 6));
     candles.forEach((c, i) => {
-      const cx = left + xStep * i + xStep * 0.5;
-      const isUp = c.c >= c.o;
-      const color = isUp ? "#2ecc71" : "#ff5a5f";
-      const openY = y(c.o);
-      const closeY = y(c.c);
-      const bodyY = Math.min(openY, closeY);
-      const bodyH = Math.max(3, Math.abs(closeY - openY));
+      if (i % labelStep === 0 || i === candles.length - 1) {
+        html += `<text x="${toX(i)}" y="${H - 4}" fill="#6d849c" font-size="9" text-anchor="middle">${c.t}</text>`;
+      }
+    });
 
-      html += `<line x1="${cx}" y1="${y(c.h)}" x2="${cx}" y2="${y(c.l)}" stroke="${color}" stroke-width="1.6"/>`;
-      html += `<rect x="${cx - 7}" y="${bodyY}" width="14" height="${bodyH}" fill="${color}" opacity="0.92" rx="2"/>`;
+    // Candles
+    candles.forEach((c, i) => {
+      const x = toX(i);
+      const isUp = c.c >= c.o;
+      const fill = isUp ? "#26a69a" : "#ef5350";
+      const wickColor = isUp ? "#1a7a71" : "#b33c3c";
+      const bodyTop = Math.min(toY(c.o), toY(c.c));
+      const bodyH = Math.max(1.5, Math.abs(toY(c.c) - toY(c.o)));
+
+      html += `<line x1="${x}" y1="${toY(c.h)}" x2="${x}" y2="${toY(c.l)}" stroke="${wickColor}" stroke-width="1.2"/>`;
+      html += `<rect x="${x - barW / 2}" y="${bodyTop}" width="${barW}" height="${bodyH}" fill="${fill}" rx="1"/>`;
     });
 
     svg.innerHTML = html;
@@ -451,13 +464,13 @@
       if (Array.isArray(chart.candles) && chart.candles.length) {
         state.candles = chart.candles.map((c) => ({ o: c.o, h: c.h, l: c.l, c: c.c, t: c.t }));
         state.priceAxis = Array.isArray(chart.axis) && chart.axis.length ? chart.axis : state.priceAxis;
-        drawCandleChart(document.getElementById("candle-chart"), state.candles, state.priceAxis);
+        drawCandleChart(document.getElementById("candle-chart"), state.candles);
         renderChartAnnotations(chart.markers, state.candles);
         const tag = document.getElementById("chart-tag");
         if (tag) tag.textContent = chart.tag || "Waiting for market data";
       } else {
         state.candles = [];
-        drawCandleChart(document.getElementById("candle-chart"), [], []);
+        drawCandleChart(document.getElementById("candle-chart"), []);
         renderChartAnnotations([], []);
         const tag = document.getElementById("chart-tag");
         if (tag) tag.textContent = "Waiting for market data";
@@ -631,7 +644,7 @@
             state.candles = [];
             state.tradeLog = [];
             renderTradeLog();
-            drawCandleChart(document.getElementById("candle-chart"), [], []);
+            drawCandleChart(document.getElementById("candle-chart"), []);
             drawPerformanceChart(document.getElementById("perf-chart"), [], []);
             // Poll /api/reset_status jusqu'à ce que reset soit terminé
             let tries = 0;
@@ -658,7 +671,7 @@
 
   function init() {
     renderLayout();
-    drawCandleChart(document.getElementById("candle-chart"), state.candles, state.priceAxis);
+    drawCandleChart(document.getElementById("candle-chart"), state.candles);
     drawPerformanceChart(document.getElementById("perf-chart"), state.performance.series, state.performance.ticks);
     renderTradeLog();
     bindControls();
