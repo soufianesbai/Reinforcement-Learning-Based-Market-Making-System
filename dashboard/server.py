@@ -104,6 +104,14 @@ def read_market_state(metrics=None):
         with MARKET_STATE_FILE.open("r", encoding="utf-8") as f:
             payload = json.load(f)
 
+        actual_symbol = payload.get("symbol", "")
+        if actual_symbol and actual_symbol != process_state["product"]:
+            return {
+                "ok": False,
+                "message": f"Waiting for {process_state['product']} data",
+                "symbol": process_state["product"],
+            }
+
         mid_raw = payload.get("mid_price")
         symbol = payload.get("symbol", process_state["product"])
         if isinstance(mid_raw, (int, float)):
