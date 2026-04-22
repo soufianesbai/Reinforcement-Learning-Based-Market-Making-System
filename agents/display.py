@@ -4,80 +4,100 @@ Display functions for market and trading information
 
 from datetime import datetime
 from typing import Dict
-from .types import Position
-
-
-def print_market_display(state: Dict):
-    """Print formatted market display"""
-    if not state:
-        return
-    
-    bid = state.get("bid_price", 0) / 100.0
-    ask = state.get("ask_price", 0) / 100.0
-    mid = state.get("mid_price", 0) / 100.0
-    spread_bps = state.get("spread_bps", 0)
-    iteration = state.get("iteration", 0)
-    
-    print(f"\n{'═'*90}")
-    print(f"{'ITERATION':<15} {iteration:<20} {'TIME':<20} {datetime.now().strftime('%H:%M:%S'):<20}")
-    print(f"{'═'*90}")
-    print(f"Bid: ${bid:>10.2f}  |  Ask: ${ask:>10.2f}  |  Mid: ${mid:>10.2f}  |  Spread: {spread_bps:>7.2f} bps")
-    
-    print("\n📊 Orderbook:")
-    print("  Bids                          Asks")
-    bids = state.get("bids", [])
-    asks = state.get("asks", [])
-    
-    for i in range(max(len(bids), len(asks))):
-        bid_str = f"  ${bids[i]['price']/100:>9.2f} x {bids[i]['quantity']:>7.0f}" if i < len(bids) else "                        "
-        ask_str = f"  ${asks[i]['price']/100:>9.2f} x {asks[i]['quantity']:>7.0f}" if i < len(asks) else ""
-        print(f"{bid_str:<30} {ask_str}")
 
 
 def print_decision(decision: Dict):
-    """Print decision analysis"""
-    print(f"\n{'═'*90}")
-    print(f"📊 Decision Analysis")
-    print(f"{'═'*90}")
-    print(f"Action: {decision['action'] or 'HOLD':>10}")
-    print(f"Reason: {decision['reason']}")
-    if decision.get('sma'):
-        print(f"SMA:    ${decision['sma']:>10.2f}")
-    if decision.get('deviation') is not None:
-        print(f"Deviation: {decision['deviation']:>6.2f}%")
-
-
-def print_execution(order_placed: bool, decision: Dict, total_trades: int):
-    """Print execution result"""
-    if order_placed:
-        print(f"\n✅ ORDER PLACED:")
-        print(f"   Side:     {decision['side'].value}")
-        print(f"   Price:    ${decision['price']/100:>10.2f}")
-        print(f"   Quantity: {decision['quantity']:>10.0f}")
-    else:
-        print(f"\n⏸️  HOLD")
-
-
-def print_position(position: Position | None):
-    """Print current position"""
-    print(f"\n{'═'*90}")
-    print(f"📈 Position")
-    print(f"{'═'*90}")
-    if position:
-        print(f"  {position}")
-    else:
-        print("  No position")
-
-
-def print_summary(cash: float, total_trades: int, position: Position | None):
-    """Print summary"""
-    print(f"\n{'═'*90}")
-    print(f"📋 Summary")
-    print(f"{'═'*90}")
-    print(f"  Cash:           ${cash:>12.2f}")
-    print(f"  Total Trades:   {total_trades:>12}")
-    print(f"  Positions:      {1 if position else 0:>12}")
+    """Print decision analysis - simple and clear format"""
+    action = decision['action'] or 'HOLD'
+    reason = decision['reason']
+    quantity = decision.get('quantity', 0)
     
-    if position:
-        total_value = cash + position.unrealized_pnl
-        print(f"  Total Value:    ${total_value:>12.2f}")
+    # Color codes
+    GREEN = '\033[92m'
+    RED = '\033[91m'
+    YELLOW = '\033[93m'
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    
+
+    if action == 'BUY':
+        # BUY in green
+        print(f"\n{GREEN}{'═'*60}")
+        print(f"  🔴 BUY")
+        print(f"{'═'*60}{RESET}")
+        print(f"  Reason:    {reason}")
+    elif action == 'SELL':
+        # SELL in red
+        print(f"\n{RED}{'═'*60}")
+        print(f"  🟢 SELL")
+        print(f"{'═'*60}{RESET}")
+        print(f"  Reason:    {reason}")
+    else:
+        # HOLD in yellow
+        print(f"\n{YELLOW}{'═'*60}")
+        print(f"  ⏸️  HOLD")
+        print(f"{'═'*60}{RESET}")
+        print(f"  Reason:    {reason}")
+
+
+def print_execution(order_placed: bool, decision: Dict, total_trades: int, cash: float = None, price: float = None, inventory: float = 0.0):
+    """Print execution result - simple format"""
+    if order_placed:
+        action = decision['action']
+        quantity = decision.get('quantity', 0)
+        unit_price = price if price else decision.get('price', 0) / 100.0
+        total_cost = quantity * unit_price
+        
+        if action == 'BUY':
+            RED = '\033[31m'
+            RESET = '\033[0m'
+            _ts = datetime.now().strftime('%H:%M:%S')
+            print(f"\n{RED}[{_ts}] ✅ Order placed - BUY{RESET}")
+            print(f"   Quantity:  {quantity:.4f}")
+            print(f"   Unit Price: ${unit_price:.2f}")
+            print(f"   Total:     ${total_cost:.2f}")
+        elif action == 'SELL':
+            GREEN = '\033[32m'
+            RESET = '\033[0m'
+            _ts = datetime.now().strftime('%H:%M:%S')
+            print(f"\n{GREEN}[{_ts}] ✅ Order placed - SELL{RESET}")
+            print(f"   Quantity:  {quantity:.4f}")
+            print(f"   Unit Price: ${unit_price:.2f}")
+            print(f"   Total:     ${total_cost:.2f}")
+        
+    
+    # Always show cash and inventory
+    BOLD = '\033[1m'
+    RESET = '\033[0m'
+    if cash is not None:
+        print(f"\n{BOLD}💰 Cash: ${cash:.2f}{RESET}")
+    print(f"{BOLD}📦 Inventory: {inventory:.4f}{RESET}")
+
+
+def print_final_summary(cash: float, initial_cash: float, total_trades: int, inventory: float = 0.0):
+    """Print final summary at the end"""
+    profit = cash - initial_cash
+    profit_pct = (profit / initial_cash * 100) if initial_cash > 0 else 0
+    
+    BOLD = '\033[1m'
+    GREEN = '\033[92m'
+    RED = '\033[91m'
+    CYAN = '\033[96m'
+    RESET = '\033[0m'
+    
+    print(f"\n{BOLD}{'═'*60}")
+    print(f"📊 FINAL SUMMARY")
+    print(f"{'═'*60}{RESET}")
+    print(f"  Total Trades:     {total_trades}")
+    print(f"  Initial Cash:     ${initial_cash:.2f}")
+    print(f"  Current Cash:     ${cash:.2f}")
+    
+    if profit >= 0:
+        print(f"  {GREEN}Profit:           ${profit:.2f} ({profit_pct:+.2f}%){RESET}")
+    else:
+        print(f"  {RED}Loss:             ${profit:.2f} ({profit_pct:+.2f}%){RESET}")
+    
+    # Show final inventory
+    print(f"  {CYAN}Final Inventory:  {inventory:.4f}{RESET}")
+    
+    print(f"{BOLD}{'═'*60}{RESET}\n")

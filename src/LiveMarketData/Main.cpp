@@ -5,7 +5,6 @@
 #include <string>
 #include <thread>
 
-#include "LiveMarketData/AgentOrders.h"
 #include "LiveMarketData/Display.h"
 #include "LiveMarketData/Fetcher.h"
 #include "LiveMarketData/Parser.h"
@@ -60,17 +59,11 @@ int main(int argc, char *argv[]) {
 
             // Parse and process
             try {
-                // Charger les nouveaux ordres de l'agent
-                LoadAgentOrders("../data/agent_orders.json");
-
                 BookSnapshotMessage snapshot = ParseBinanceSnapshot(jsonResponse);
 
                 if (orderbook.ProcessMarketData(snapshot)) {
-                    // Réinjecter les ordres de l'agent après le snapshot
-                    ReinjectAgentOrders(orderbook);
-
                     // Écrire l'état du marché pour l'agent Python
-                    WriteMarketStateJson(orderbook, "../data/market_state.json", iteration);
+                    WriteMarketStateJson(orderbook, "../data/market_state.json", iteration, symbol);
 
                     // Display the orderbook
                     PrintOrderbook(orderbook, symbol, displayLevels);

@@ -33,4 +33,10 @@ Thumbs.db
 .vscode/
 .idea/
 
-data/
+#data/
+data/*
+agents/models_checkpoints/*
+agents/ppo/courbe_apprentissage.png
+agents/exchange/config.py
+node_modules/
+test-results/
