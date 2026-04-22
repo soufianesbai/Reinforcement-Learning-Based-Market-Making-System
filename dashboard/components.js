@@ -150,45 +150,21 @@ window.MarketMindComponents = (function () {
         </div>
 
         <h3 class="sub-title">Trade Log</h3>
-        <table class="log-table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Action</th>
-              <th>Qty</th>
-              <th>Price</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody id="trade-log-body"></tbody>
-        </table>
-
-      </section>
-    `;
-  }
-
-  function logsSection() {
-    return `
-      <section class="card logs-section">
-        <div class="logs-section-header">
-          <h2>Recent Logs</h2>
-          <div class="log-tabs">
-            <button id="tab-agent" class="log-tab active">Agent</button>
-            <button id="tab-market" class="log-tab">Market</button>
-          </div>
+        <div class="trade-log-wrap">
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Qty</th>
+                <th>Price</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody id="trade-log-body"></tbody>
+          </table>
         </div>
-        <pre id="recent-logs" class="recent-logs-full">Waiting for logs...</pre>
-      </section>
-    `;
-  }
 
-  function performanceCard() {
-    return `
-      <section class="card">
-        <h2>Profit & Performance</h2>
-        <div class="perf-wrap">
-          <svg id="perf-chart" viewBox="0 0 1180 220" preserveAspectRatio="none"></svg>
-        </div>
       </section>
     `;
   }
@@ -199,7 +175,5 @@ window.MarketMindComponents = (function () {
     orderBookCard,
     chartCard,
     rightPanel,
-    performanceCard,
-    logsSection,
   };
 })();

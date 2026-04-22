@@ -2,8 +2,6 @@
   const C = window.MarketMindComponents;
   const state = JSON.parse(JSON.stringify(window.MarketMindData));
   let pollTimer = null;
-  let recentLogs = { agent: [], market: [] };
-  let activeLogTab = "agent";
   let activePanel = "inventory";
   let isSwitchingSymbol = false;
   let lastMetrics = { cash: null, inventory: null, trade_count: 0 };
@@ -21,14 +19,10 @@
               ${C.orderBookCard(state.orderBook)}
               ${C.chartCard()}
             </div>
-            ${C.performanceCard()}
           </section>
 
           ${C.rightPanel(state.products, state.agents)}
         </main>
-        <div class="logs-wrapper">
-          ${C.logsSection()}
-        </div>
       </div>
     `;
   }
@@ -89,71 +83,6 @@
       html += `<line x1="${x}" y1="${toY(c.h)}" x2="${x}" y2="${toY(c.l)}" stroke="${wickColor}" stroke-width="1.2"/>`;
       html += `<rect x="${x - barW / 2}" y="${bodyTop}" width="${barW}" height="${bodyH}" fill="${fill}" rx="1"/>`;
     });
-
-    svg.innerHTML = html;
-  }
-
-  function drawPerformanceChart(svg, series, ticks) {
-    if (!svg) return;
-    if (!Array.isArray(series) || series.length === 0) {
-      svg.innerHTML = "";
-      return;
-    }
-
-    const W = 1180;
-    const H = 220;
-    const left = 12;
-    const right = 12;
-    const top = 10;
-    const innerW = W - left - right;
-    const innerH = H - top - 30;
-
-    const min = Math.min(...series) - 10;
-    const max = Math.max(...series) + 10;
-    const range = (max - min) || 1;
-    const xStep = series.length > 1 ? innerW / (series.length - 1) : innerW;
-
-    const xy = series.map((v, i) => {
-      const x = left + i * xStep;
-      const y = top + ((max - v) / range) * innerH;
-      return [x, y];
-    });
-
-    const yAxisWidth = 48;
-    const chartLeft = left + yAxisWidth;
-
-    let html = "";
-    for (let i = 0; i <= 5; i++) {
-      const gy = top + (innerH / 5) * i;
-      const labelVal = max - (i / 5) * (max - min);
-      const prefix = labelVal >= 0 ? "+" : "";
-      html += `<line x1="${chartLeft}" y1="${gy}" x2="${W - right}" y2="${gy}" stroke="rgba(159,179,209,0.14)" stroke-width="1"/>`;
-      html += `<text x="${chartLeft - 4}" y="${gy + 4}" fill="#9fb3d1" font-size="10" text-anchor="end">${prefix}$${labelVal.toFixed(0)}</text>`;
-    }
-
-    const innerWChart = W - right - chartLeft;
-    const xStepChart = series.length > 1 ? innerWChart / (series.length - 1) : innerWChart;
-    const xyChart = series.map((v, i) => {
-      const x = chartLeft + i * xStepChart;
-      const y = top + ((max - v) / range) * innerH;
-      return [x, y];
-    });
-
-    ticks.forEach((t, i) => {
-      const x = chartLeft + (innerWChart / Math.max(1, ticks.length - 1)) * i;
-      html += `<text x="${x - 14}" y="${H - 10}" fill="#9fb3d1" font-size="11">${t}</text>`;
-    });
-
-    const linePoints = xyChart.map((p) => `${p[0]},${p[1]}`).join(" ");
-    const areaPoints = `${chartLeft},${top + innerH} ${linePoints} ${W - right},${top + innerH}`;
-
-    html += `<polygon points="${areaPoints}" fill="rgba(74,163,255,0.12)"/>`;
-    html += `<polyline points="${linePoints}" fill="none" stroke="#4aa3ff" stroke-width="2.4"/>`;
-
-    const zeroY = top + ((max - 0) / range) * innerH;
-    if (zeroY > top && zeroY < top + innerH) {
-      html += `<line x1="${chartLeft}" y1="${zeroY}" x2="${W - right}" y2="${zeroY}" stroke="rgba(159,179,209,0.35)" stroke-width="1" stroke-dasharray="4,3"/>`;
-    }
 
     svg.innerHTML = html;
   }
@@ -338,20 +267,6 @@
       .join("");
   }
 
-  function renderRecentLogs() {
-    const logBox = document.getElementById("recent-logs");
-    if (!logBox) return;
-    const lines = recentLogs[activeLogTab] || [];
-    logBox.textContent = lines.length ? lines.join("\n") : "No logs yet.";
-    // Auto-scroll to bottom to show latest lines
-    logBox.scrollTop = logBox.scrollHeight;
-
-    const agentTab = document.getElementById("tab-agent");
-    const marketTab = document.getElementById("tab-market");
-    if (agentTab) agentTab.classList.toggle("active", activeLogTab === "agent");
-    if (marketTab) marketTab.classList.toggle("active", activeLogTab === "market");
-  }
-
   function applyMarketState(payload) {
     if (!payload || !payload.ok) {
       state.orderBook.ask = null;
@@ -400,7 +315,7 @@
       const res = await fetch("/api/snapshot");
       const snap = await res.json();
 
-      const { market, trades, performance: perf, status, metrics, logs, chart, history } = snap;
+      const { market, trades, status, metrics, chart, history } = snap;
 
       applyMarketState(market);
       lastMetrics = metrics;
@@ -417,18 +332,6 @@
       state.tradeLog = Array.isArray(trades) ? trades : [];
       renderTradeLog();
 
-      if (Array.isArray(perf.series) && perf.series.length) {
-        state.performance.series = perf.series;
-        if (Array.isArray(perf.ticks) && perf.ticks.length) {
-          state.performance.ticks = perf.ticks;
-        }
-        drawPerformanceChart(document.getElementById("perf-chart"), state.performance.series, state.performance.ticks);
-      } else {
-        state.performance.series = [];
-        state.performance.ticks = [];
-        drawPerformanceChart(document.getElementById("perf-chart"), [], []);
-      }
-
       if (Array.isArray(chart.candles) && chart.candles.length) {
         state.candles = chart.candles.map((c) => ({ o: c.o, h: c.h, l: c.l, c: c.c, t: c.t }));
         drawCandleChart(document.getElementById("candle-chart"), state.candles);
@@ -436,12 +339,6 @@
         state.candles = [];
         drawCandleChart(document.getElementById("candle-chart"), []);
       }
-
-      recentLogs = {
-        agent: Array.isArray(logs.agent) ? logs.agent.slice(-40) : [],
-        market: Array.isArray(logs.market) ? logs.market.slice(-40) : [],
-      };
-      renderRecentLogs();
 
       const btn = document.getElementById("start-btn");
       const stopBtn = document.getElementById("stop-btn");
@@ -460,23 +357,6 @@
       setError(status.last_error || "");
     } catch (_) {
       setInfo("Backend API unavailable – fallback mock mode.");
-    }
-  }
-
-  function bindLogTabs() {
-    const agentTab = document.getElementById("tab-agent");
-    const marketTab = document.getElementById("tab-market");
-    if (agentTab) {
-      agentTab.addEventListener("click", () => {
-        activeLogTab = "agent";
-        renderRecentLogs();
-      });
-    }
-    if (marketTab) {
-      marketTab.addEventListener("click", () => {
-        activeLogTab = "market";
-        renderRecentLogs();
-      });
     }
   }
 
@@ -601,12 +481,10 @@
           const data = await res.json();
           if (data.ok) {
             setInfo("Session data cleared. Waiting for backend reset...");
-            state.performance.series = [];
             state.candles = [];
             state.tradeLog = [];
             renderTradeLog();
             drawCandleChart(document.getElementById("candle-chart"), []);
-            drawPerformanceChart(document.getElementById("perf-chart"), [], []);
             // Poll /api/reset_status jusqu'à ce que reset soit terminé
             let tries = 0;
             while (tries < 50) { // max 5s
@@ -633,12 +511,9 @@
   function init() {
     renderLayout();
     drawCandleChart(document.getElementById("candle-chart"), state.candles);
-    drawPerformanceChart(document.getElementById("perf-chart"), state.performance.series, state.performance.ticks);
     renderTradeLog();
     bindControls();
-    bindLogTabs();
     bindSidebar();
-    renderRecentLogs();
     renderDetailPanel();
 
     loadLiveData();

@@ -20,7 +20,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { height: 100%; }
+html, body { height: 100%; overflow: hidden; }
 body {
   margin: 0;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -29,7 +29,8 @@ body {
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   display: grid;
   grid-template-rows: 72px 1fr;
 }
@@ -82,19 +83,21 @@ body {
 
 
 .dashboard-grid {
-  padding: 18px;
+  padding: 12px 16px;
   display: grid;
-  gap: 16px;
-  grid-template-columns: 1fr 320px;
-  align-items: start;
+  gap: 12px;
+  grid-template-columns: 1fr 300px;
+  align-items: stretch;
+  height: 100%;
+  overflow: hidden;
+  min-height: 0;
 }
 
 /* ── Stat Cards ───────────────────────────────────────────── */
 .stat-cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 4px;
+  gap: 10px;
 }
 
 .stat-card {
@@ -144,13 +147,29 @@ body {
 
 .main-content {
   display: grid;
-  gap: 16px;
+  gap: 12px;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .top-cards {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   grid-template-columns: 1fr 1.4fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.top-cards > .card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.top-cards > .card > h2 {
+  flex-shrink: 0;
 }
 
 .card {
@@ -169,7 +188,8 @@ body {
 
 .orderbook-viz {
   position: relative;
-  height: 290px;
+  height: 120px;
+  flex-shrink: 0;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid rgba(159, 179, 209, 0.12);
@@ -232,10 +252,13 @@ body {
 }
 
 .orderbook-depth {
-  margin-top: 14px;
+  margin-top: 10px;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .orderbook-side {
@@ -291,11 +314,12 @@ body {
   border-radius: 10px;
   border: 1px solid rgba(159, 179, 209, 0.12);
   background: #0f1d32;
-  height: 290px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
-#candle-chart, #perf-chart {
+#candle-chart {
   width: 100%;
   height: 100%;
   display: block;
@@ -303,8 +327,17 @@ body {
 
 
 .right-panel {
-  display: grid;
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.trade-log-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .status-row {
@@ -532,54 +565,6 @@ select {
   background: rgba(74, 163, 255, 0.15);
 }
 
-/* ── Logs Section (bottom, full-width) ───────────────────── */
-.logs-wrapper {
-  padding: 0 18px 22px;
-}
-
-.logs-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-}
-
-.logs-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.logs-section-header h2 {
-  margin: 0;
-  font-size: 1.02rem;
-  font-weight: 600;
-}
-
-.recent-logs-full {
-  margin: 0;
-  border-radius: 10px;
-  border: 1px solid rgba(159, 179, 209, 0.22);
-  background: #070f1d;
-  color: #d8e6fb;
-  font-family: 'JetBrains Mono', 'Fira Mono', 'Cascadia Code', 'Consolas', monospace;
-  font-size: 0.78rem;
-  line-height: 1.55;
-  padding: 14px 16px;
-  height: 220px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-
-.perf-wrap {
-  position: relative;
-  border-radius: 10px;
-  border: 1px solid rgba(159, 179, 209, 0.12);
-  background: #101f35;
-  height: 220px;
-  overflow: hidden;
-}
 
 @media (max-width: 1180px) {
   .dashboard-grid {
