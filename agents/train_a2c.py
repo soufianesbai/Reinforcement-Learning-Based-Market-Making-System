@@ -253,7 +253,7 @@ class ContinuousBinanceEnv(gym.Env):
         return self._get_obs(), float(reward), terminated, False, {}
 
 
-def train_critic(lr_actor=1e-3, lr_critic=1e-3, gamma=0.99, n_episodes=1000, MAX_GRAD_NORM=0.5):
+def train_critic(lr_actor=1e-3, lr_critic=1e-3, gamma=0.99, n_episodes=2000, MAX_GRAD_NORM=0.5):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[A2C Q-Critic] Training on {device}")
     episode_rewards_history = []
@@ -355,11 +355,11 @@ def train_critic(lr_actor=1e-3, lr_critic=1e-3, gamma=0.99, n_episodes=1000, MAX
             advantages = (q_sa_detach - v_s_detach).squeeze()
 
         entropies_t = torch.stack(entropies)
-        #entropy_coef = 0.1
+        #entropy_coef = 0.01
         entropy_coef = max(0.01, 0.1 * (1 - ep / n_episodes))
 
 
-        actor_loss = (-log_probs_t * advantages + -entropy_coef * entropies_t).mean()
+        actor_loss = (-log_probs_t * advantages -entropy_coef * entropies_t).mean()
         # actor_loss = -(log_probs_t * advantages).mean()
 
         actor_optim.zero_grad()
