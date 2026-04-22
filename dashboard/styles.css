@@ -80,33 +80,6 @@ body {
   gap: 16px;
 }
 
-.top-menu {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.top-menu a {
-  color: var(--text-sub);
-  text-decoration: none;
-  font-size: 0.9rem;
-}
-.top-menu a.active,
-.top-menu a:hover { color: var(--text-main); }
-
-.btn {
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-main);
-  padding: 8px 14px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: 600;
-}
-.btn-sign {
-  background: var(--blue);
-  border-color: transparent;
-}
 
 .dashboard-grid {
   padding: 18px;
@@ -628,20 +601,6 @@ select {
   word-break: break-all;
 }
 
-/* keep old .recent-logs for safety */
-.recent-logs {
-  margin: 0;
-  border-radius: 10px;
-  border: 1px solid rgba(159, 179, 209, 0.22);
-  background: #0a172b;
-  color: #d8e6fb;
-  font-size: 0.7rem;
-  line-height: 1.35;
-  padding: 10px;
-  max-height: 180px;
-  overflow: auto;
-  white-space: pre-wrap;
-}
 
 .perf-wrap {
   position: relative;
@@ -668,8 +627,6 @@ select {
   .orderbook-depth {
     grid-template-columns: 1fr;
   }
-  .top-menu { display: none; }
-  .btn { padding: 7px 10px; }
 }
 
 @media (max-width: 640px) {

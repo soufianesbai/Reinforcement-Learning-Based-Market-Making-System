@@ -7,7 +7,7 @@
   let activePanel = "inventory";
   let isSwitchingSymbol = false;
   let lastMetrics = { cash: null, inventory: null, trade_count: 0 };
-  let lastHistory = { trades: 0, wins: 0, losses: 0, net: 0, win_rate: 0 };
+  let lastHistory = { trades: 0, buys: 0, sells: 0, net: 0, sell_ratio: 0 };
 
   function renderLayout() {
     const app = document.getElementById("app");
@@ -62,7 +62,7 @@
       html += `<line x1="${left}" y1="${gy}" x2="${W - right}" y2="${gy}" stroke="rgba(159,179,209,0.16)" stroke-width="1"/>`;
     }
 
-    axisValues.forEach((value, idx) => {
+    axisValues.slice().reverse().forEach((value, idx) => {
       const yy = top + (innerH / Math.max(1, axisValues.length - 1)) * idx;
       html += `<text x="${W - right + 8}" y="${yy + 4}" fill="#9fb3d1" font-size="10">${value.toFixed(1)}</text>`;
     });
@@ -109,22 +109,42 @@
       return [x, y];
     });
 
+    const yAxisWidth = 48;
+    const chartLeft = left + yAxisWidth;
+
     let html = "";
     for (let i = 0; i <= 5; i++) {
       const gy = top + (innerH / 5) * i;
-      html += `<line x1="${left}" y1="${gy}" x2="${W - right}" y2="${gy}" stroke="rgba(159,179,209,0.14)" stroke-width="1"/>`;
+      const labelVal = max - (i / 5) * (max - min);
+      const prefix = labelVal >= 0 ? "+" : "";
+      html += `<line x1="${chartLeft}" y1="${gy}" x2="${W - right}" y2="${gy}" stroke="rgba(159,179,209,0.14)" stroke-width="1"/>`;
+      html += `<text x="${chartLeft - 4}" y="${gy + 4}" fill="#9fb3d1" font-size="10" text-anchor="end">${prefix}$${labelVal.toFixed(0)}</text>`;
     }
 
+    const innerWChart = W - right - chartLeft;
+    const xStepChart = series.length > 1 ? innerWChart / (series.length - 1) : innerWChart;
+    const xyChart = series.map((v, i) => {
+      const x = chartLeft + i * xStepChart;
+      const y = top + ((max - v) / range) * innerH;
+      return [x, y];
+    });
+
     ticks.forEach((t, i) => {
-      const x = left + (innerW / Math.max(1, ticks.length - 1)) * i;
+      const x = chartLeft + (innerWChart / Math.max(1, ticks.length - 1)) * i;
       html += `<text x="${x - 14}" y="${H - 10}" fill="#9fb3d1" font-size="11">${t}</text>`;
     });
 
-    const linePoints = xy.map((p) => `${p[0]},${p[1]}`).join(" ");
-    const areaPoints = `${left},${top + innerH} ${linePoints} ${W - right},${top + innerH}`;
+    const linePoints = xyChart.map((p) => `${p[0]},${p[1]}`).join(" ");
+    const areaPoints = `${chartLeft},${top + innerH} ${linePoints} ${W - right},${top + innerH}`;
 
     html += `<polygon points="${areaPoints}" fill="rgba(74,163,255,0.12)"/>`;
     html += `<polyline points="${linePoints}" fill="none" stroke="#4aa3ff" stroke-width="2.4"/>`;
+
+    const zeroY = top + ((max - 0) / range) * innerH;
+    if (zeroY > top && zeroY < top + innerH) {
+      html += `<line x1="${chartLeft}" y1="${zeroY}" x2="${W - right}" y2="${zeroY}" stroke="rgba(159,179,209,0.35)" stroke-width="1" stroke-dasharray="4,3"/>`;
+    }
+
     svg.innerHTML = html;
   }
 

@@ -262,22 +262,6 @@ def read_chart_payload():
     }
 
 
-def read_history_summary():
-    rows = read_trade_log(limit=300)
-    wins = len([r for r in rows if r["result"] > 0])
-    losses = len([r for r in rows if r["result"] < 0])
-    total = len(rows)
-    pnl = round(sum(r["result"] for r in rows), 2)
-    win_rate = round((wins / total) * 100, 2) if total else 0.0
-    return {
-        "trades": total,
-        "wins": wins,
-        "losses": losses,
-        "net": pnl,
-        "win_rate": win_rate,
-    }
-
-
 def read_performance(limit: int = 30):
     with state_lock:
         series = list(perf_state["series"][-limit:])
@@ -303,7 +287,7 @@ def read_snapshot():
         return {"market": empty_market, "trades": [], "performance": {"series": [], "ticks": []},
                 "status": status, "metrics": {"cash": None, "inventory": None, "trade_count": 0},
                 "logs": {"agent": [], "market": []}, "chart": empty_chart,
-                "history": {"trades": 0, "wins": 0, "losses": 0, "net": 0.0, "win_rate": 0.0}}
+                "history": {"trades": 0, "buys": 0, "sells": 0, "net": 0.0, "sell_ratio": 0.0}}
 
     metrics = read_runtime_metrics()
     market = read_market_state(metrics=metrics)
@@ -525,9 +509,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._send_json(payload)
             return
 
-        if path == "/api/history":
-            self._send_json(read_history_summary())
-            return
 
         if path == "/api/status":
             with state_lock:
