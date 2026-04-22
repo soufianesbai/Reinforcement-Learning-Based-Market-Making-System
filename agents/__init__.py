@@ -1,24 +1,21 @@
 """
-Trading Agent Package - Modular organization
+Trading Agent Package
 """
 
-from .types import Side, Position
+from .trading_types import Side
+from .agent import TradingAgent
+from .strategies.mean_reversion import MeanReversionStrategy
 from .market_data import MarketData
-from .interfaces import BaseStrategy, StrategySignal
-from .engine import MarketMakerEngine
-
-# Optionnel : Exposer les stratégies directement
-from .strategies.sma import SMAStrategy
-# from .strategies.rl_agent import RLAgentStrategy
-#from .strategies.a2c_rl import A2CStrategy
+from .exchange.binance_client import BinanceTestnetClient
+from .display import print_decision, print_execution
 
 __all__ = [
-    "Side", 
-    "Position",
-    "MarketData",
-    "BaseStrategy",
-    "StrategySignal",
-    "MarketMakerEngine",
-    "SMAStrategy",
-    "PPOStrategy"
+    'Side',
+    'TradingAgent',
+    'TradingStrategy',
+    'MarketData',
+    'BinanceTestnetClient',
+    'print_decision',
+    'print_execution',
 ]
+
