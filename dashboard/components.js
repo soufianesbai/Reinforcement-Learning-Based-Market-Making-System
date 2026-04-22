@@ -109,7 +109,7 @@ window.MarketMindComponents = (function () {
       <section class="card">
         <h2>Price Chart & Actions</h2>
         <div class="chart-wrap">
-          <svg id="candle-chart" viewBox="0 0 780 290" preserveAspectRatio="none"></svg>
+          <div id="candle-chart"></div>
         </div>
       </section>
     `;

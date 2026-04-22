@@ -3,6 +3,8 @@
   const state = JSON.parse(JSON.stringify(window.MarketMindData));
   let pollTimer = null;
   let activePanel = "inventory";
+  let tvChart = null;
+  let tvSeries = null;
   let isSwitchingSymbol = false;
   let lastMetrics = { cash: null, inventory: null, trade_count: 0 };
   let lastHistory = { trades: 0, buys: 0, sells: 0, net: 0, sell_ratio: 0 };
@@ -27,64 +29,67 @@
     `;
   }
 
-  function drawCandleChart(svg, candles) {
-    if (!svg) return;
+  function initTVChart() {
+    const container = document.getElementById("candle-chart");
+    if (!container || tvChart || !window.LightweightCharts) return;
 
+    tvChart = LightweightCharts.createChart(container, {
+      width: container.clientWidth,
+      height: container.clientHeight,
+      layout: {
+        background: { type: "solid", color: "#0f1d32" },
+        textColor: "#9fb3d1",
+      },
+      grid: {
+        vertLines: { color: "rgba(159,179,209,0.08)" },
+        horzLines: { color: "rgba(159,179,209,0.08)" },
+      },
+      rightPriceScale: { borderColor: "rgba(159,179,209,0.2)" },
+      timeScale: {
+        borderColor: "rgba(159,179,209,0.2)",
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    });
+
+    tvSeries = tvChart.addCandlestickSeries({
+      upColor: "#26a69a",
+      downColor: "#ef5350",
+      borderUpColor: "#26a69a",
+      borderDownColor: "#ef5350",
+      wickUpColor: "#26a69a",
+      wickDownColor: "#ef5350",
+    });
+
+    new ResizeObserver(() => {
+      if (tvChart && container.clientWidth > 0)
+        tvChart.resize(container.clientWidth, container.clientHeight);
+    }).observe(container);
+  }
+
+  function updateTVChart(candles) {
+    if (!tvSeries) return;
     if (!Array.isArray(candles) || candles.length === 0) {
-      svg.innerHTML = '<text x="390" y="148" fill="#9fb3d1" font-size="13" text-anchor="middle">Waiting for market data...</text>';
+      tvSeries.setData([]);
       return;
     }
 
-    const W = 780, H = 290;
-    const m = { top: 14, right: 68, bottom: 26, left: 10 };
-    const cW = W - m.left - m.right;
-    const cH = H - m.top - m.bottom;
-
-    const dataMax = Math.max(...candles.map((c) => c.h));
-    const dataMin = Math.min(...candles.map((c) => c.l));
-    const priceSpan = dataMax - dataMin || 1;
-    const vPad = priceSpan * 0.1;
-    const yMax = dataMax + vPad;
-    const yMin = dataMin - vPad;
-    const ySpan = yMax - yMin;
-
-    const toY = (p) => m.top + (1 - (p - yMin) / ySpan) * cH;
-    const slot = cW / candles.length;
-    const toX = (i) => m.left + slot * i + slot / 2;
-    const barW = Math.max(2, Math.floor(slot * 0.55));
-
-    let html = "";
-
-    // Y grid + labels (6 lines)
-    for (let i = 0; i <= 5; i++) {
-      const price = yMax - (i / 5) * ySpan;
-      const gy = toY(price);
-      html += `<line x1="${m.left}" y1="${gy}" x2="${W - m.right}" y2="${gy}" stroke="rgba(159,179,209,0.13)" stroke-width="1"/>`;
-      html += `<text x="${W - m.right + 6}" y="${gy}" fill="#9fb3d1" font-size="10" dominant-baseline="middle">${price.toFixed(2)}</text>`;
+    const now = new Date();
+    const seen = new Set();
+    const data = [];
+    for (const c of candles) {
+      const [h, m, s] = c.t.split(":").map(Number);
+      const d = new Date(now);
+      d.setHours(h, m, s, 0);
+      const ts = Math.floor(d.getTime() / 1000);
+      if (seen.has(ts)) continue;
+      seen.add(ts);
+      data.push({ time: ts, open: c.o, high: c.h, low: c.l, close: c.c });
     }
 
-    // X time labels — show at most 6 evenly distributed
-    const labelStep = Math.max(1, Math.floor(candles.length / 6));
-    candles.forEach((c, i) => {
-      if (i % labelStep === 0 || i === candles.length - 1) {
-        html += `<text x="${toX(i)}" y="${H - 4}" fill="#6d849c" font-size="9" text-anchor="middle">${c.t}</text>`;
-      }
-    });
-
-    // Candles
-    candles.forEach((c, i) => {
-      const x = toX(i);
-      const isUp = c.c >= c.o;
-      const fill = isUp ? "#26a69a" : "#ef5350";
-      const wickColor = isUp ? "#1a7a71" : "#b33c3c";
-      const bodyTop = Math.min(toY(c.o), toY(c.c));
-      const bodyH = Math.max(1.5, Math.abs(toY(c.c) - toY(c.o)));
-
-      html += `<line x1="${x}" y1="${toY(c.h)}" x2="${x}" y2="${toY(c.l)}" stroke="${wickColor}" stroke-width="1.2"/>`;
-      html += `<rect x="${x - barW / 2}" y="${bodyTop}" width="${barW}" height="${bodyH}" fill="${fill}" rx="1"/>`;
-    });
-
-    svg.innerHTML = html;
+    tvSeries.setData(data);
+    tvChart.timeScale().fitContent();
   }
 
   function setInfo(message) {
@@ -334,10 +339,10 @@
 
       if (Array.isArray(chart.candles) && chart.candles.length) {
         state.candles = chart.candles.map((c) => ({ o: c.o, h: c.h, l: c.l, c: c.c, t: c.t }));
-        drawCandleChart(document.getElementById("candle-chart"), state.candles);
+        updateTVChart(state.candles);
       } else {
         state.candles = [];
-        drawCandleChart(document.getElementById("candle-chart"), []);
+        updateTVChart([]);
       }
 
       const btn = document.getElementById("start-btn");
@@ -484,7 +489,7 @@
             state.candles = [];
             state.tradeLog = [];
             renderTradeLog();
-            drawCandleChart(document.getElementById("candle-chart"), []);
+            updateTVChart([]);
             // Poll /api/reset_status jusqu'à ce que reset soit terminé
             let tries = 0;
             while (tries < 50) { // max 5s
@@ -510,7 +515,7 @@
 
   function init() {
     renderLayout();
-    drawCandleChart(document.getElementById("candle-chart"), state.candles);
+    initTVChart();
     renderTradeLog();
     bindControls();
     bindSidebar();
