@@ -157,7 +157,9 @@ window.MarketMindComponents = (function () {
             <tr>
               <th>Time</th>
               <th>Action</th>
-              <th>Result</th>
+              <th>Qty</th>
+              <th>Price</th>
+              <th>Total</th>
             </tr>
           </thead>
           <tbody id="trade-log-body"></tbody>

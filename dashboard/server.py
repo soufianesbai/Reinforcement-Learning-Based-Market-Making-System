@@ -21,6 +21,8 @@ AGENT_LOG_FILE = DATA_DIR / "dashboard_agent.log"
 ANSI_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 ORDER_RE = re.compile(r"\[(\d{2}:\d{2}:\d{2})\].*?Order placed - (BUY|SELL)")
 TOTAL_RE = re.compile(r"Total:\s*\$(\d+(?:\.\d+)?)")
+UNIT_PRICE_RE = re.compile(r"Unit Price:\s*\$(\d+(?:\.\d+)?)")
+QTY_RE = re.compile(r"Quantity:\s*(\d+(?:\.\d+)?)")
 CASH_RE = re.compile(r"Cash:\s*\$(\d+(?:\.\d+)?)")
 INVENTORY_RE = re.compile(r"Inventory:\s*(\d+(?:\.\d+)?)") 
 
@@ -187,6 +189,8 @@ def read_trade_log(limit: int = 25):
     actions = []
     pending_action = None
     pending_time = None
+    pending_qty = None
+    pending_price = None
 
     with AGENT_LOG_FILE.open("r", encoding="utf-8", errors="ignore") as f:
         for raw in f:
@@ -195,9 +199,19 @@ def read_trade_log(limit: int = 25):
             if order_match:
                 pending_time = order_match.group(1)
                 pending_action = order_match.group(2).title()
+                pending_qty = None
+                pending_price = None
                 continue
 
             if pending_action:
+                qty_match = QTY_RE.search(line)
+                if qty_match and pending_qty is None:
+                    pending_qty = float(qty_match.group(1))
+                    continue
+                price_match = UNIT_PRICE_RE.search(line)
+                if price_match and pending_price is None:
+                    pending_price = float(price_match.group(1))
+                    continue
                 total_match = TOTAL_RE.search(line)
                 if total_match:
                     amount = float(total_match.group(1))
@@ -207,10 +221,14 @@ def read_trade_log(limit: int = 25):
                             "time": pending_time or datetime.now().strftime("%H:%M:%S"),
                             "action": pending_action,
                             "result": round(signed, 2),
+                            "qty": pending_qty,
+                            "price": pending_price,
                         }
                     )
                     pending_action = None
                     pending_time = None
+                    pending_qty = None
+                    pending_price = None
 
     dedup = []
     for row in actions:

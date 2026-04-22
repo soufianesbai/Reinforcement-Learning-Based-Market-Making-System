@@ -57,15 +57,12 @@
     const xStep = innerW / candles.length;
 
     let html = "";
-    for (let i = 0; i <= 6; i++) {
-      const gy = top + (innerH / 6) * i;
+    for (let i = 0; i <= 5; i++) {
+      const gy = top + (innerH / 5) * i;
       html += `<line x1="${left}" y1="${gy}" x2="${W - right}" y2="${gy}" stroke="rgba(159,179,209,0.16)" stroke-width="1"/>`;
+      const price = max - (i / 5) * (max - min);
+      html += `<text x="${W - right + 8}" y="${gy + 4}" fill="#9fb3d1" font-size="10">${price.toFixed(2)}</text>`;
     }
-
-    axisValues.slice().reverse().forEach((value, idx) => {
-      const yy = top + (innerH / Math.max(1, axisValues.length - 1)) * idx;
-      html += `<text x="${W - right + 8}" y="${yy + 4}" fill="#9fb3d1" font-size="10">${value.toFixed(1)}</text>`;
-    });
 
     candles.forEach((c, i) => {
       const cx = left + xStep * i + xStep * 0.5;
@@ -235,6 +232,8 @@
         <tr>
           <td>${row.time}</td>
           <td class="${row.action === "Buy" ? "log-buy" : "log-sell"}">${row.action}</td>
+          <td>${row.qty != null ? row.qty.toFixed(4) : "--"}</td>
+          <td>${row.price != null ? "$" + row.price.toFixed(2) : "--"}</td>
           <td class="${row.result >= 0 ? "pos" : "neg"}">${row.result >= 0 ? "+" : "-"}$${Math.abs(row.result).toFixed(2)}</td>
         </tr>
       `)
