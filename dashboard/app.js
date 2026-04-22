@@ -411,7 +411,7 @@
 
     if (payload.symbol) {
       const subtitle = document.querySelector(".brand-text p");
-      if (subtitle) subtitle.textContent = `AI Trading Simulator • ${payload.symbol}`;
+      if (subtitle) subtitle.textContent = `Live Testnet Trading • ${payload.symbol}`;
     }
   }
 
@@ -538,7 +538,7 @@
     if (productSelect) {
       productSelect.addEventListener("change", async () => {
         const subtitle = document.querySelector(".brand-text p");
-        if (subtitle) subtitle.textContent = `AI Trading Simulator • ${productSelect.value}`;
+        if (subtitle) subtitle.textContent = `Live Testnet Trading • ${productSelect.value}`;
 
         try {
           const statusRes = await fetch("/api/status");
@@ -548,7 +548,7 @@
           // If running, apply symbol change immediately by restarting with new product.
           if (status.market_running || status.agent_running) {
             const selectedProduct = productSelect.value || "SOLUSDT";
-            const selectedAgent = agentSelect?.value || status.agent || "RL Agent";
+            const selectedAgent = agentSelect?.value || status.agent || "Mean Reversion";
             setInfo(`Switching symbol to ${selectedProduct}...`);
             setError("");
             setSwitchingState(true);
@@ -589,8 +589,8 @@
         setInfo("Starting simulation...");
 
         try {
-          await startSimulation(productSelect?.value || "SOLUSDT", agentSelect?.value || "RL Agent");
-          setInfo(`Simulation started: ${productSelect?.value || "SOLUSDT"} / ${agentSelect?.value || "RL Agent"}`);
+          await startSimulation(productSelect?.value || "SOLUSDT", agentSelect?.value || "Mean Reversion");
+          setInfo(`Simulation started: ${productSelect?.value || "SOLUSDT"} / ${agentSelect?.value || "Mean Reversion"}`);
           loadLiveData();
         } catch (_) {
           btn.disabled = false;

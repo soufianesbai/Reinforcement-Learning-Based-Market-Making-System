@@ -28,7 +28,7 @@ window.MarketMindComponents = (function () {
           </div>
           <div class="brand-text">
             <h1>MarketMind</h1>
-            <p>AI Trading Simulator</p>
+            <p>Live Testnet Trading</p>
           </div>
         </div>
         <div class="top-actions">
@@ -135,7 +135,7 @@ window.MarketMindComponents = (function () {
         <div class="control-group">
           <label for="agent-select">Agent</label>
           <select id="agent-select">
-            ${agents.map((a) => `<option ${a === "RL Agent" ? "selected" : ""}>${a}</option>`).join("")}
+            ${agents.map((a) => `<option ${a === "Mean Reversion" ? "selected" : ""}>${a}</option>`).join("")}
           </select>
         </div>
 

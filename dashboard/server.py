@@ -29,7 +29,7 @@ process_state = {
     "market": None,
     "agent": None,
     "product": "SOLUSDT",
-    "agent_name": "RL Agent",
+    "agent_name": "Mean Reversion",
     "last_error": None,
     "started_at": None,
 }
@@ -57,7 +57,6 @@ def strip_ansi(line: str) -> str:
 
 def strategy_from_agent(agent_name: str) -> str:
     mapping = {
-        "RL Agent": "mean_reversion",
         "Mean Reversion": "mean_reversion",
         "RSI": "rsi",
         "Bollinger": "bollinger",
@@ -258,7 +257,7 @@ def read_chart_payload():
         "candles": candles[-24:],
         "axis": axis,
         "markers": markers,
-        "tag": f"Vol: {last['v']} | ${last['c']:.2f}  {last['t']}",
+        "tag": f"${last['c']:.2f}  {last['t']}",
     }
 
 
@@ -323,7 +322,7 @@ def read_snapshot():
         last = candles[-1]
         chart = {
             "candles": candles[-24:], "axis": axis, "markers": markers,
-            "tag": f"Vol: {last['v']} | ${last['c']:.2f}  {last['t']}",
+            "tag": f"${last['c']:.2f}  {last['t']}",
             "symbol": process_state["product"],
         }
     else:
@@ -599,7 +598,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 payload = json.loads(body)
 
                 product = payload.get("product", "SOLUSDT")
-                agent_name = payload.get("agent", "RL Agent")
+                agent_name = payload.get("agent", "Mean Reversion")
 
                 with state_lock:
                     process_state["product"] = product
