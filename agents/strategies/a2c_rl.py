@@ -17,17 +17,17 @@ class ActorNN(nn.Module):
     """
     Actor  -> action logits (hold, buy, sell)
     """
-    def __init__(self, state_dim: int = 4, action_dim: int = 3, hidden_dim: int = 128): 
+    def __init__(self, state_dim: int = 121, action_dim: int = 3, hidden_dim: int = 512): 
         super().__init__()
         self.backbone = nn.Sequential( 
             nn.Linear(state_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.LayerNorm(hidden_dim // 2),
             nn.ReLU(),
         )
-        self.actor_head  = nn.Linear(hidden_dim, action_dim)  #actor's output, 3 scores for(hold,buy,sell)
+        self.actor_head  = nn.Linear(hidden_dim // 2, action_dim)  #actor's output, 3 scores for(hold,buy,sell)
 
     def forward(self, x: torch.Tensor):
         features = self.backbone(x)
@@ -41,24 +41,24 @@ class ActorNN(nn.Module):
         return action, dist.log_prob(action), dist.entropy()
 
 class CriticNN(nn.Module):
-    def __init__(self, state_dim: int = 4, action_dim: int = 3, hidden_dim: int = 128):
+    def __init__(self, state_dim: int = 121, action_dim: int = 3, hidden_dim: int = 512):
         super().__init__()
         # Q-value branch: uses (state + action)
         self.q_input = nn.Linear(state_dim + action_dim, hidden_dim)
         self.q_head = nn.Sequential(
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim // 2),
             nn.ReLU(),
-            nn.Linear(hidden_dim, 1)
+            nn.Linear(hidden_dim // 2, 1)
         )
 
         # V-value branch: uses state only
         self.v_input = nn.Linear(state_dim, hidden_dim)
         self.v_head = nn.Sequential(
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim // 2),
             nn.ReLU(),
-            nn.Linear(hidden_dim, 1)
+            nn.Linear(hidden_dim // 2, 1)
         )
 
     def forward(self, state, action):
@@ -115,22 +115,53 @@ class A2CStrategy(BaseStrategy):
             return True
         return False
     
-    def _build_observation(self) -> Optional[np.ndarray]:
-        """Build normalised state vector — identical to training environment."""
-        if len(self.market_data.prices) < 3: 
+    # def _build_observation(self) -> Optional[np.ndarray]:
+    #     """Build normalised state vector — identical to training environment."""
+    #     if len(self.market_data.prices) < 3: 
+    #          return None
+
+    #     b_qty = sum(b["quantity"] for b in self.market_data.bids[:3]) if self.market_data.bids else 0 
+    #     a_qty = sum(a["quantity"] for a in self.market_data.asks[:3]) if self.market_data.asks else 0 
+    #     imb   = (b_qty - a_qty) / (b_qty + a_qty) if (b_qty + a_qty) > 0 else 0.0 #orderbook imbalance
+
+    #     norm_imb    = float(np.clip(imb, -1.0, 1.0))
+    #     norm_spread = (self.market_data.spread / self.market_data.mid_price * 10000) / 10.0 \
+    #                   if self.market_data.mid_price else 0.0
+    #     norm_dev    = (self.market_data.get_price_deviation() or 0.0) / 2.0
+    #     norm_inv    = self.current_inventory / 50.0
+
+    #     return np.array([norm_imb, norm_spread, norm_dev, norm_inv], dtype=np.float32)
+
+    def build_observation(self) -> Optional[np.ndarray]:
+        """
+        Build 121-dim observation vector identical to PPO training env:
+        [norm_close(30), norm_high(30), norm_low(30), norm_volume(30), norm_inventory]
+        """
+        #get last 30 prices/volumes from marketdata (same window as PPO)
+        if len(self.marketdata.prices) < 30:
             return None
+        
+        prices = np.array(self.marketdata.prices[-30:])  # last 30 closes
 
-        b_qty = sum(b["quantity"] for b in self.market_data.bids[:3]) if self.market_data.bids else 0 
-        a_qty = sum(a["quantity"] for a in self.market_data.asks[:3]) if self.market_data.asks else 0 
-        imb   = (b_qty - a_qty) / (b_qty + a_qty) if (b_qty + a_qty) > 0 else 0.0 #orderbook imbalance
-
-        norm_imb    = float(np.clip(imb, -1.0, 1.0))
-        norm_spread = (self.market_data.spread / self.market_data.mid_price * 10000) / 10.0 \
-                      if self.market_data.mid_price else 0.0
-        norm_dev    = (self.market_data.get_price_deviation() or 0.0) / 2.0
-        norm_inv    = self.current_inventory / 50.0
-
-        return np.array([norm_imb, norm_spread, norm_dev, norm_inv], dtype=np.float32)
+        high = prices * 1.001   # fake high (0.1% above close)
+        low  = prices * 0.999   #fake low (0.1% below close)
+        volume = np.ones(30)    #fake constant volume (PPO normalizes it anyway)
+        
+        base = prices[-1] + 1e-8 
+        norm_close = (prices / base) - 1.0
+        norm_high  = (high / base) - 1.0
+        norm_low   = (low / base) - 1.0
+        
+        vol_mean = volume.mean() + 1e-8
+        norm_volume = (volume / vol_mean) - 1.0
+        
+        norm_inventory = self.current_inventory / 10.0 
+        
+        obs = np.concatenate([
+            norm_close, norm_high, norm_low, norm_volume, [norm_inventory]
+        ])
+        
+        return obs.astype(np.float32)
 
     #BaseStrategy Interface
 
