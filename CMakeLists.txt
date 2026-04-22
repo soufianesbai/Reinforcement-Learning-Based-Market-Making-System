@@ -84,7 +84,18 @@ add_executable(LiveMarketData
 )
 
 
+# Benchmark executable (latency measurements)
+add_executable(OrderBookBenchmark
+        tests/benchmark.cpp
+        ${SOURCES}
+)
+
 target_include_directories(OrderBookTests
+        PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_include_directories(OrderBookBenchmark
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
