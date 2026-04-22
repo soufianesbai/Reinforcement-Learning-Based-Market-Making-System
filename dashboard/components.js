@@ -110,8 +110,6 @@ window.MarketMindComponents = (function () {
         <h2>Price Chart & Actions</h2>
         <div class="chart-wrap">
           <svg id="candle-chart" viewBox="0 0 780 290" preserveAspectRatio="none"></svg>
-          <div id="chart-annotations"></div>
-          <div class="chart-tag" id="chart-tag">550 149.70</div>
         </div>
       </section>
     `;

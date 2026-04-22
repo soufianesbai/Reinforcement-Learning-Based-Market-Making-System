@@ -301,36 +301,6 @@ body {
   display: block;
 }
 
-.chart-tag {
-  position: absolute;
-  padding: 4px 8px;
-  background: rgba(74, 163, 255, 0.18);
-  border: 1px solid rgba(74, 163, 255, 0.55);
-  border-radius: 8px;
-  font-size: 0.72rem;
-  color: #d9ebff;
-  left: 55%;
-  top: 40%;
-}
-
-.chart-annotation {
-  position: absolute;
-  font-size: 0.75rem;
-  padding: 4px 7px;
-  border-radius: 8px;
-  border: 1px solid;
-  backdrop-filter: blur(3px);
-}
-.chart-annotation.buy {
-  color: #d2ffe6;
-  background: rgba(46, 204, 113, 0.17);
-  border-color: rgba(46, 204, 113, 0.5);
-}
-.chart-annotation.sell {
-  color: #ffd6d8;
-  background: rgba(231, 76, 60, 0.17);
-  border-color: rgba(231, 76, 60, 0.52);
-}
 
 .right-panel {
   display: grid;

@@ -352,38 +352,6 @@
     if (marketTab) marketTab.classList.toggle("active", activeLogTab === "market");
   }
 
-  function renderChartAnnotations(markers, candles = state.candles) {
-    const box = document.getElementById("chart-annotations");
-    if (!box) return;
-    box.innerHTML = "";
-
-    const subset = (Array.isArray(markers) ? markers : []).slice(-4);
-    const safeCandles = Array.isArray(candles) ? candles : [];
-    if (!subset.length || !safeCandles.length) return;
-
-    const highs = safeCandles.map((c) => c.h);
-    const lows = safeCandles.map((c) => c.l);
-    const min = Math.min(...lows);
-    const max = Math.max(...highs);
-    const range = (max - min) || 1;
-
-    subset.forEach((marker, idx) => {
-      const cls = marker.side === "sell" ? "sell" : "buy";
-      const foundIndex = safeCandles.findIndex((c) => c.t === marker.time);
-      const candleIndex = foundIndex >= 0 ? foundIndex : Math.max(0, safeCandles.length - 1 - idx);
-      const candle = safeCandles[candleIndex] || safeCandles[safeCandles.length - 1];
-      const x = safeCandles.length > 1 ? 6 + (candleIndex / (safeCandles.length - 1)) * 88 : 50;
-      const price = cls === "sell" ? candle.h : candle.l;
-      const y = 10 + ((max - price) / range) * 70;
-      const el = document.createElement("div");
-      el.className = `chart-annotation ${cls}`;
-      el.style.left = `${x}%`;
-      el.style.top = `${y}%`;
-      el.textContent = marker.label || (cls === "sell" ? "Sell Order" : "Buy Order");
-      box.appendChild(el);
-    });
-  }
-
   function applyMarketState(payload) {
     if (!payload || !payload.ok) {
       state.orderBook.ask = null;
@@ -463,17 +431,10 @@
 
       if (Array.isArray(chart.candles) && chart.candles.length) {
         state.candles = chart.candles.map((c) => ({ o: c.o, h: c.h, l: c.l, c: c.c, t: c.t }));
-        state.priceAxis = Array.isArray(chart.axis) && chart.axis.length ? chart.axis : state.priceAxis;
         drawCandleChart(document.getElementById("candle-chart"), state.candles);
-        renderChartAnnotations(chart.markers, state.candles);
-        const tag = document.getElementById("chart-tag");
-        if (tag) tag.textContent = chart.tag || "Waiting for market data";
       } else {
         state.candles = [];
         drawCandleChart(document.getElementById("candle-chart"), []);
-        renderChartAnnotations([], []);
-        const tag = document.getElementById("chart-tag");
-        if (tag) tag.textContent = "Waiting for market data";
       }
 
       recentLogs = {
