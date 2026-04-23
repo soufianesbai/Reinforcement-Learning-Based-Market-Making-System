@@ -62,6 +62,7 @@ def strategy_from_agent(agent_name: str) -> str:
         "Mean Reversion": "mean_reversion",
         "RSI": "rsi",
         "Bollinger": "bollinger",
+        "DQN": "dqn",
     }
     return mapping.get(agent_name, "mean_reversion")
 
@@ -625,6 +626,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
                 product = payload.get("product", "SOLUSDT")
                 agent_name = payload.get("agent", "Mean Reversion")
+
+                if agent_name == "PPO":
+                    self._send_json({"ok": False, "message": "PPO n'a pas encore de module d'inférence live. Entraîne le modèle puis crée agents/strategies/ppo_strategy.py."}, status=400)
+                    return
 
                 with state_lock:
                     process_state["product"] = product

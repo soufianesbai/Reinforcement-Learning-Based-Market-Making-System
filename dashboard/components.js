@@ -133,7 +133,12 @@ window.MarketMindComponents = (function () {
         <div class="control-group">
           <label for="agent-select">Agent</label>
           <select id="agent-select">
-            ${agents.map((a) => `<option ${a === "Mean Reversion" ? "selected" : ""}>${a}</option>`).join("")}
+            ${agents.map((a) => {
+              const disabled = a === "PPO" ? "disabled title=\"PPO : module d'inférence live non disponible\"" : "";
+              const selected = a === "Mean Reversion" ? "selected" : "";
+              const label = a === "PPO" ? `${a} (non disponible)` : a;
+              return `<option ${selected} ${disabled}>${label}</option>`;
+            }).join("")}
           </select>
         </div>
 

@@ -31,6 +31,10 @@ def main():
             from .strategies.bollinger_bands import BollingerBandsStrategy
             strategy_class = BollingerBandsStrategy
             print("🎯 Using Bollinger Bands Strategy")
+        elif strategy_name == "dqn":
+            from .strategies.dqn_agent import DQNStrategy
+            strategy_class = DQNStrategy
+            print("🎯 Using DQN Strategy")
         else:
             from .strategies.mean_reversion import MeanReversionStrategy
             strategy_class = MeanReversionStrategy

@@ -390,7 +390,10 @@
         body: JSON.stringify({ product, agent }),
       });
 
-      if (!response.ok) throw new Error("Failed to start simulation");
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to start simulation");
+      }
     }
 
     if (productSelect) {
@@ -450,10 +453,10 @@
           await startSimulation(productSelect?.value || "SOLUSDT", agentSelect?.value || "Mean Reversion");
           setInfo(`Simulation started: ${productSelect?.value || "SOLUSDT"} / ${agentSelect?.value || "Mean Reversion"}`);
           loadLiveData();
-        } catch (_) {
+        } catch (err) {
           btn.disabled = false;
           btn.textContent = "Start Simulation";
-          setError("Could not start simulation from backend.");
+          setError(err.message || "Could not start simulation from backend.");
         }
       });
     }
