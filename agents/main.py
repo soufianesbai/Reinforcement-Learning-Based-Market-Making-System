@@ -14,7 +14,7 @@ def main():
     
     # Check if API keys are configured
     if BINANCE_TESTNET_API_KEY == "your_api_key_here" or not BINANCE_TESTNET_API_KEY:
-        print("❌ Error: Please configure your Binance testnet API keys in agents/exchange/config.py")
+        print("Error: Please configure your Binance testnet API keys in agents/exchange/config.py")
         print("   You can get them from: https://testnet.binance.vision/")
         return
     
@@ -26,31 +26,31 @@ def main():
         if strategy_name == "rsi":
             from .strategies.rsi import RSIStrategy
             strategy_class = RSIStrategy
-            print("🎯 Using RSI Strategy")
+            print("Using RSI Strategy")
         elif strategy_name == "bollinger":
             from .strategies.bollinger_bands import BollingerBandsStrategy
             strategy_class = BollingerBandsStrategy
-            print("🎯 Using Bollinger Bands Strategy")
+            print("Using Bollinger Bands Strategy")
         elif strategy_name == "dqn":
             try:
                 from .strategies.dqn_agent import DQNStrategy
                 strategy_class = DQNStrategy
-                print("🎯 Using DQN Strategy")
+                print("Using DQN Strategy")
             except ImportError as e:
-                print(f"❌ DQN requires PyTorch (pip install torch): {e}")
+                print(f"DQN requires PyTorch (pip install torch): {e}")
                 return
         elif strategy_name == "ppo":
             try:
                 from .strategies.PPO_agent import PPOStrategy
                 strategy_class = PPOStrategy
-                print("🎯 Using PPO Strategy")
+                print("Using PPO Strategy")
             except ImportError as e:
-                print(f"❌ PPO requires TensorFlow (pip install tensorflow): {e}")
+                print(f"PPO requires TensorFlow (pip install tensorflow): {e}")
                 return
         else:
             from .strategies.mean_reversion import MeanReversionStrategy
             strategy_class = MeanReversionStrategy
-            print("🎯 Using Mean Reversion Strategy")
+            print("Using Mean Reversion Strategy")
         
         agent = TradingAgent(
             symbol=symbol,
@@ -63,7 +63,7 @@ def main():
         agent.run()
         
     except Exception as e:
-        print(f"❌ Failed to start agent: {e}")
+        print(f"Failed to start agent: {e}")
 
 
 if __name__ == "__main__":

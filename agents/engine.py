@@ -65,7 +65,7 @@ class MarketMakerEngine:
                 json.dump([order], f)
             return True
         except Exception as e:
-            print(f"❌ Execution Error: {e}")
+            print(f"Execution Error: {e}")
             return False
 
     def update_position(self, signal):

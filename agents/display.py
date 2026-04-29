@@ -70,8 +70,8 @@ def print_execution(order_placed: bool, decision: Dict, total_trades: int, cash:
     BOLD = '\033[1m'
     RESET = '\033[0m'
     if cash is not None:
-        print(f"\n{BOLD}💰 Cash: ${cash:.2f}{RESET}")
-    print(f"{BOLD}📦 Inventory: {inventory:.4f}{RESET}")
+        print(f"\n{BOLD} Cash: ${cash:.2f}{RESET}")
+    print(f"{BOLD} Inventory: {inventory:.4f}{RESET}")
 
 
 def print_final_summary(cash: float, initial_cash: float, total_trades: int, inventory: float = 0.0):
@@ -86,7 +86,7 @@ def print_final_summary(cash: float, initial_cash: float, total_trades: int, inv
     RESET = '\033[0m'
     
     print(f"\n{BOLD}{'═'*60}")
-    print(f"📊 FINAL SUMMARY")
+    print(f"FINAL SUMMARY")
     print(f"{'═'*60}{RESET}")
     print(f"  Total Trades:     {total_trades}")
     print(f"  Initial Cash:     ${initial_cash:.2f}")

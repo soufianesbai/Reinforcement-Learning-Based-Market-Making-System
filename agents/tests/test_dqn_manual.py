@@ -69,7 +69,7 @@ def test_buy_path():
     assert signal.side == Side.BUY, f"Expected BUY, got {signal.side}"
     assert signal.price == 9990, f"Expected bid price in cents, got {signal.price}"
     assert signal.quantity == 5.0, f"Expected default quantity 5.0, got {signal.quantity}"
-    print("✅ BUY path validated")
+    print("BUY path validated")
 
 
 def test_sell_path():
@@ -83,7 +83,7 @@ def test_sell_path():
     signal = strategy.compute_signal()
     assert signal.side == Side.SELL, f"Expected SELL, got {signal.side}"
     assert signal.price == 10010, f"Expected ask price in cents, got {signal.price}"
-    print("✅ SELL path validated")
+    print("SELL path validated")
 
 
 def test_inventory_guard():
@@ -97,7 +97,7 @@ def test_inventory_guard():
     signal = strategy.compute_signal()
     assert signal.side is None, f"Expected HOLD when inventory is empty, got {signal.side}"
     assert signal.reason == "No inventory to sell (hold)", f"Unexpected reason: {signal.reason}"
-    print("✅ Inventory guard validated")
+    print("Inventory guard validated")
 
 
 if __name__ == "__main__":

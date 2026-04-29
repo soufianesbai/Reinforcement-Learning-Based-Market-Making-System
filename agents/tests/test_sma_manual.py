@@ -12,7 +12,7 @@ from agents.strategies.sma import SMAStrategy
 from agents.types import Side
 
 def test_sma_reaction():
-    print("🧪 DÉBUT DU TEST : Stratégie SMA isolée")
+    print("DÉBUT DU TEST : Stratégie SMA isolée")
     print("=" * 50)
     
     # 1. Instancier la stratégie
@@ -35,7 +35,7 @@ def test_sma_reaction():
         "ask_price": stable_price_cents + 10
     }
     
-    print("\n1️⃣  Injection de données stables (100$)...")
+    print("\n  Injection de données stables (100$)...")
     for i in range(3):
         strategy.update_data(stable_market)
         print(f"   -> Update {i+1}/3")
@@ -45,7 +45,7 @@ def test_sma_reaction():
     print(f"   📊 État actuel : SMA = {status.get('sma')}")
     
     if status.get('sma') != 100.0:
-        print(f"   ❌ ERREUR : La SMA devrait être 100.0, obtenu : {status.get('sma')}")
+        print(f"  ERREUR : La SMA devrait être 100.0, obtenu : {status.get('sma')}")
         return
 
     # 3. Simulation d'un Crash (Opportunité d'ACHAT)
@@ -60,11 +60,11 @@ def test_sma_reaction():
         "ask_price": crash_price_cents + 10
     }
     
-    print("\n2️⃣  Simulation Crash (100$ -> 90$)...")
+    print("\n Simulation Crash (100$ -> 90$)...")
     strategy.update_data(crash_market)
     
     # 4. Calcul du signal
-    print("   🤔 Calcul de la décision...")
+    print("  Calcul de la décision...")
     signal = strategy.compute_signal()
     
     print("-" * 20)
@@ -75,11 +75,11 @@ def test_sma_reaction():
     
     # 5. Validation finale
     if signal.side == Side.BUY:
-        print("\n✅ SUCCÈS : L'agent a correctement décidé d'ACHETER après le crash.")
+        print("\nSUCCÈS : L'agent a correctement décidé d'ACHETER après le crash.")
     elif signal.side == Side.SELL:
-        print("\n❌ ÉCHEC : L'agent veut VENDRE alors que le prix est bas.")
+        print("\nÉCHEC : L'agent veut VENDRE alors que le prix est bas.")
     else:
-        print("\n❌ ÉCHEC : L'agent a décidé de NE RIEN FAIRE (HOLD).")
+        print("\nÉCHEC : L'agent a décidé de NE RIEN FAIRE (HOLD).")
         print("   Vérifiez votre seuil ou le calcul de la déviation.")
 
 if __name__ == "__main__":
