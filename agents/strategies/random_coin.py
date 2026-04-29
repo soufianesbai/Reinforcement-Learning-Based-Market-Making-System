@@ -4,8 +4,10 @@ from ..interfaces import BaseStrategy, StrategySignal
 from ..types import Side
 
 class RandomStrategy(BaseStrategy):
-    def __init__(self):
-        pass
+    def __init__(self, symbol: str = "SOLUSDT", quantity_per_trade: float = 5.0, **kwargs):
+        self.symbol = symbol
+        self.quantity = quantity_per_trade
+        self.mid_price = 0.0
 
     def update_data(self, market_state: Dict) -> None:
         # On s'en fiche des données, on joue au hasard !

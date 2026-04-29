@@ -15,7 +15,7 @@ class PPOStrategy(BaseStrategy):
     def __init__(
         self,
         symbol: str = "SOLUSDT",
-        policy_model_path: str = "models/ppo_policy.h5",
+        policy_model_path: str = "agents/ppo/models_checkpoints/ppo_policy_FINAL.keras",
         quantity_per_trade: float = 5.0,
         window_size: int = 30,
     ):

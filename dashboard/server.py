@@ -62,6 +62,9 @@ def strategy_from_agent(agent_name: str) -> str:
         "Mean Reversion": "mean_reversion",
         "RSI": "rsi",
         "Bollinger": "bollinger",
+        "SMA": "sma",
+        "Random": "random",
+        "A2C": "a2c",
         "DQN": "dqn",
         "PPO": "ppo",
     }
@@ -627,13 +630,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
                 product = payload.get("product", "SOLUSDT")
                 agent_name = payload.get("agent", "Mean Reversion")
-
-                if agent_name == "DQN":
-                    self._send_json({"ok": False, "message": "DQN : modèle non trouvé. Placer le fichier models/dqn_agent.pth pour activer cet agent."}, status=400)
-                    return
-                if agent_name == "PPO":
-                    self._send_json({"ok": False, "message": "PPO : TensorFlow non disponible sur Python 3.14."}, status=400)
-                    return
 
                 with state_lock:
                     process_state["product"] = product

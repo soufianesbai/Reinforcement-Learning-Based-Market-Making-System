@@ -32,6 +32,12 @@ class MarketData:
         if self.mid_price > 0:
             self.prices.append(self.mid_price)
 
+    def get_sma(self) -> Optional[float]:
+        """Return the simple moving average of recent prices."""
+        if len(self.prices) < 3:
+            return None
+        return statistics.mean(self.prices)
+
     def get_price_deviation(self) -> Optional[float]:
         """Return % deviation of current price from rolling SMA."""
         if len(self.prices) < 3:

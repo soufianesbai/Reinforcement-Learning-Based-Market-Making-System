@@ -23,29 +23,25 @@ def main():
         strategy_name = os.getenv("STRATEGY", "mean_reversion").lower()
         symbol = os.getenv("SYMBOL")
 
-        if strategy_name == "rsi":
-            from .strategies.rsi import RSIStrategy
-            strategy_class = RSIStrategy
-            print("Using RSI Strategy")
-        elif strategy_name == "bollinger":
-            from .strategies.bollinger_bands import BollingerBandsStrategy
-            strategy_class = BollingerBandsStrategy
-            print("Using Bollinger Bands Strategy")
-        elif strategy_name == "dqn":
+        strategies = {
+            "rsi": (".strategies.rsi", "RSIStrategy"),
+            "bollinger": (".strategies.bollinger_bands", "BollingerBandsStrategy"),
+            "sma": (".strategies.sma", "SMAStrategy"),
+            "random": (".strategies.random_coin", "RandomStrategy"),
+            "a2c": (".strategies.a2c_rl", "A2CStrategy"),
+            "dqn": (".strategies.dqn_agent", "DQNStrategy"),
+            "ppo": (".strategies.PPO_agent", "PPOStrategy"),
+        }
+
+        if strategy_name in strategies:
+            module_path, class_name = strategies[strategy_name]
             try:
-                from .strategies.dqn_agent import DQNStrategy
-                strategy_class = DQNStrategy
-                print("Using DQN Strategy")
+                import importlib
+                mod = importlib.import_module(module_path, package="agents")
+                strategy_class = getattr(mod, class_name)
+                print(f"Using {class_name}")
             except ImportError as e:
-                print(f"DQN requires PyTorch (pip install torch): {e}")
-                return
-        elif strategy_name == "ppo":
-            try:
-                from .strategies.PPO_agent import PPOStrategy
-                strategy_class = PPOStrategy
-                print("Using PPO Strategy")
-            except ImportError as e:
-                print(f"PPO requires TensorFlow (pip install tensorflow): {e}")
+                print(f"{strategy_name.upper()} import failed: {e}")
                 return
         else:
             from .strategies.mean_reversion import MeanReversionStrategy

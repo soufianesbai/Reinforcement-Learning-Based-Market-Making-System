@@ -78,7 +78,7 @@ class BinanceTestnetClient:
         if response.status_code == 200:
             return response.json()
 
-        print(f"❌ Order failed: {response.status_code} - {response.text}")
+        print(f"Order failed: {response.status_code} - {response.text}")
         return None
     
     def get_account_info(self) -> Optional[Dict]:
@@ -87,7 +87,7 @@ class BinanceTestnetClient:
             endpoint = "/api/v3/account"
             return self._send_signed_request("GET", endpoint, {})
         except Exception as e:
-            print(f"❌ Error getting account info: {e}")
+            print(f"Error getting account info: {e}")
             return None
     
     def get_balance(self, asset: str = "USDT") -> Optional[float]:
@@ -127,7 +127,7 @@ class BinanceTestnetClient:
             return self._send_signed_request("POST", endpoint, params)
                 
         except Exception as e:
-            print(f"❌ Error placing order: {e}")
+            print(f"Error placing order: {e}")
             return None
     
     def place_limit_order(self, symbol: str, side: Side, quantity: float, 
@@ -158,7 +158,7 @@ class BinanceTestnetClient:
             return self._send_signed_request("POST", endpoint, params)
                 
         except Exception as e:
-            print(f"❌ Error placing limit order: {e}")
+            print(f"Error placing limit order: {e}")
             return None
     
     def get_order_status(self, symbol: str, order_id: int) -> Optional[Dict]:
@@ -171,7 +171,7 @@ class BinanceTestnetClient:
             }
             return self._send_signed_request("GET", endpoint, params)
         except Exception as e:
-            print(f"❌ Error getting order status: {e}")
+            print(f"Error getting order status: {e}")
             return None
     
     def cancel_order(self, symbol: str, order_id: int) -> Optional[Dict]:
@@ -184,7 +184,7 @@ class BinanceTestnetClient:
             }
             return self._send_signed_request("DELETE", endpoint, params)
         except Exception as e:
-            print(f"❌ Error canceling order: {e}")
+            print(f"Error canceling order: {e}")
             return None
     
     def get_open_orders(self, symbol: Optional[str] = None) -> Optional[list]:
@@ -197,7 +197,7 @@ class BinanceTestnetClient:
 
             return self._send_signed_request("GET", endpoint, params)
         except Exception as e:
-            print(f"❌ Error getting open orders: {e}")
+            print(f"Error getting open orders: {e}")
             return None
     
     def test_connectivity(self) -> bool:

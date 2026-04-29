@@ -24,7 +24,7 @@ class TradingAgent:
             symbol = os.environ.get("SYMBOL") or self._get_symbol_from_market_state()
         
         self.symbol = symbol or "SOLUSDT"
-        print(f"📌 Symbol: {self.symbol}")
+        print(f"Symbol: {self.symbol}")
         
         # Use provided strategy or default to MeanReversionStrategy
         if strategy_class is None:
@@ -47,24 +47,24 @@ class TradingAgent:
         if not self.binance.test_connectivity():
             raise ConnectionError("Failed to connect to Binance testnet. Check your internet connection.")
         
-        print(f"✅ Connected to Binance testnet")
+        print(f"Connected to Binance testnet")
         
         # Get initial USDT balance
         balance = self.binance.get_balance("USDT")
         if balance is not None:
             self.cash = balance
-            print(f"💰 Initial USDT balance: {self.cash:.2f}")
+            print(f"Initial USDT balance: {self.cash:.2f}")
         else:
-            print("⚠️  Could not retrieve balance")
+            print("Could not retrieve balance")
         
         # Check if we already have inventory for this asset
         asset = self._extract_base_asset(self.symbol)
         asset_balance = self.binance.get_balance(asset)
         if asset_balance and asset_balance > 0:
-            print(f"📦 Found existing {asset} inventory: {asset_balance:.8f}")
+            print(f"Found existing {asset} inventory: {asset_balance:.8f}")
             self.inventory = asset_balance
         else:
-            print(f"📦 No existing {asset} inventory")
+            print(f"No existing {asset} inventory")
             self.inventory = 0.0
     
     def _extract_base_asset(self, symbol: str) -> str:
@@ -98,12 +98,12 @@ class TradingAgent:
             # Ignore stale market state from another symbol during symbol switch
             file_symbol = state.get("symbol")
             if file_symbol and file_symbol != self.symbol:
-                print(f"⏳ Waiting for {self.symbol} data (file has {file_symbol})...")
+                print(f"Waiting for {self.symbol} data (file has {file_symbol})...")
                 return None
 
             return state
         except Exception as e:
-            print(f"❌ Error reading market state: {e}")
+            print(f"Error reading market state: {e}")
             return None
     
     def execute_order(self, decision: Dict) -> Optional[Dict]:
@@ -122,7 +122,7 @@ class TradingAgent:
             # Verify we have inventory before SELL
             if decision["side"] == Side.SELL:
                 if quantity > self.inventory:
-                    print(f"❌ Cannot SELL: Insufficient inventory (need {quantity:.8f}, have {self.inventory:.8f})")
+                    print(f"Cannot SELL: Insufficient inventory (need {quantity:.8f}, have {self.inventory:.8f})")
                     return None
 
             # Verify we have enough cash before BUY
@@ -134,11 +134,11 @@ class TradingAgent:
                 est_price = decision.get("price", 0) / 100.0
                 est_cost = quantity * est_price if est_price > 0 else 0
                 if self.cash is not None and est_cost > 0 and self.cash < est_cost:
-                    print(f"❌ Cannot BUY: Insufficient USDT (need {est_cost:.2f}, have {self.cash:.2f})")
+                    print(f"Cannot BUY: Insufficient USDT (need {est_cost:.2f}, have {self.cash:.2f})")
                     return None
             
             # Place market order on Binance
-            print(f"📤 Sending {decision['side'].value} order to Binance testnet...")
+            print(f"Sending {decision['side'].value} order to Binance testnet...")
             
             order_response = self.binance.place_order(
                 symbol=self.symbol,
@@ -149,7 +149,7 @@ class TradingAgent:
             
             if order_response:
                 self.last_order_id = order_response.get('orderId')
-                print(f"✅ Order executed! Order ID: {self.last_order_id}")
+                print(f"Order executed! Order ID: {self.last_order_id}")
                 
                 # Update balance and inventory from Binance
                 cash_balance = self.binance.get_balance("USDT")
@@ -164,11 +164,11 @@ class TradingAgent:
                 
                 return order_response
             else:
-                print(f"❌ Order failed")
+                print(f"Order failed")
                 return None
                 
         except Exception as e:
-            print(f"❌ Error executing order: {e}")
+            print(f"Error executing order: {e}")
             return None
     
     def run(self, duration_seconds: int = None):
@@ -180,9 +180,9 @@ class TradingAgent:
         # Store initial cash for summary
         initial_cash = self.cash
 
-        print(f"\n🤖 Trading Agent Started - {self.symbol}")
-        print(f"📁 Reading market data from: {self.state_file}")
-        print(f"🔗 Executing orders on: Binance Testnet")
+        print(f"\n Trading Agent Started - {self.symbol}")
+        print(f" Reading market data from: {self.state_file}")
+        print(f" Executing orders on: Binance Testnet")
 
         stop_flag = {"stop": False}
 
@@ -198,14 +198,25 @@ class TradingAgent:
                 # Read market state
                 state = self.read_market_state()
                 if not state:
-                    print("⏳ Waiting for market state from C++...")
+                    print(" Waiting for market state from C++...")
                     time.sleep(0.5)
                     continue
                 
                 iteration += 1
                 
                 # Analyze market
-                decision = self.strategy.analyze(state)
+                if hasattr(self.strategy, 'analyze'):
+                    decision = self.strategy.analyze(state)
+                else:
+                    self.strategy.update_data(state)
+                    signal = self.strategy.compute_signal()
+                    decision = {
+                        "action": signal.side.value if signal.side else None,
+                        "side": signal.side,
+                        "price": int(signal.price) if signal.price else 0,
+                        "quantity": signal.quantity,
+                        "reason": signal.reason,
+                    }
                 print_decision(decision)
                 
                 # Execute order directly on Binance
@@ -230,9 +241,9 @@ class TradingAgent:
                 time.sleep(2)  # Longer wait for real trading
         
         except KeyboardInterrupt:
-            print("\n\n⛔ Agent stopped by user")
+            print("\n\n Agent stopped by user")
         except Exception as e:
-            print(f"\n❌ Error: {e}")
+            print(f"\n Error: {e}")
             traceback.print_exc()
         
         # Final summary

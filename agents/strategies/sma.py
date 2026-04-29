@@ -8,7 +8,7 @@ class SMAStrategy(BaseStrategy):
     Implementation of the Mean Reversion strategy using SMA.
     """
     
-    def __init__(self, symbol: str, quantity_per_trade: float = 5.0, window_size: int = 10, threshold: float = 0.01):
+    def __init__(self, symbol: str, quantity_per_trade: float = 5.0, window_size: int = 10, threshold: float = 0.001):
         self.symbol = symbol
         self.quantity = quantity_per_trade
         self.threshold = threshold

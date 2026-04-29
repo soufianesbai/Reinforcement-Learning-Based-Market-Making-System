@@ -135,8 +135,6 @@ window.MarketMindComponents = (function () {
           <select id="agent-select">
             ${agents.map((a) => {
               const selected = a === "Mean Reversion" ? "selected" : "";
-              if (a === "DQN") return `<option disabled title="Modèle non trouvé — placer models/dqn_agent.pth">DQN (modèle manquant)</option>`;
-              if (a === "PPO") return `<option disabled title="TensorFlow non disponible sur Python 3.14">PPO (TF indisponible)</option>`;
               return `<option ${selected}>${a}</option>`;
             }).join("")}
           </select>

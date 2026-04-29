@@ -52,7 +52,7 @@ def print_execution(order_placed: bool, decision: Dict, total_trades: int, cash:
             RED = '\033[31m'
             RESET = '\033[0m'
             _ts = datetime.now().strftime('%H:%M:%S')
-            print(f"\n{RED}[{_ts}] ✅ Order placed - BUY{RESET}")
+            print(f"\n{RED}[{_ts}] Order placed - BUY{RESET}")
             print(f"   Quantity:  {quantity:.4f}")
             print(f"   Unit Price: ${unit_price:.2f}")
             print(f"   Total:     ${total_cost:.2f}")
@@ -60,7 +60,7 @@ def print_execution(order_placed: bool, decision: Dict, total_trades: int, cash:
             GREEN = '\033[32m'
             RESET = '\033[0m'
             _ts = datetime.now().strftime('%H:%M:%S')
-            print(f"\n{GREEN}[{_ts}] ✅ Order placed - SELL{RESET}")
+            print(f"\n{GREEN}[{_ts}] Order placed - SELL{RESET}")
             print(f"   Quantity:  {quantity:.4f}")
             print(f"   Unit Price: ${unit_price:.2f}")
             print(f"   Total:     ${total_cost:.2f}")
