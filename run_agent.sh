@@ -6,11 +6,11 @@ cd "$(dirname "$0")"
 
 # Vérifier que Python3 est installé
 if ! command -v python3 &> /dev/null; then
-    echo "❌ Python3 n'est pas installé!"
+    echo "Python3 n'est pas installé!"
     exit 1
 fi
 
-echo "✅ Python trouvé: $(python3 --version)"
+echo "Python trouvé: $(python3 --version)"
 
 # Stratégie par défaut
 STRATEGY="${1:-mean_reversion}"
@@ -33,8 +33,8 @@ if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     exit 0
 fi
 
-echo "🎯 Stratégie: $STRATEGY"
-echo "🚀 Lancement de l'agent..."
+echo "Stratégie: $STRATEGY"
+echo "Lancement de l'agent..."
 echo ""
 
 STRATEGY=$STRATEGY python3 -m agents.main

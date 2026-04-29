@@ -138,10 +138,10 @@ class A2CStrategy(BaseStrategy):
         [norm_close(30), norm_high(30), norm_low(30), norm_volume(30), norm_inventory]
         """
         #get last 30 prices/volumes from marketdata (same window as PPO)
-        if len(self.marketdata.prices) < 30:
+        if len(self.market_data.prices) < 30:
             return None
         
-        prices = np.array(self.marketdata.prices[-30:])  # last 30 closes
+        prices = np.array(self.market_data.prices[-30:])  # last 30 closes
 
         high = prices * 1.001   # fake high (0.1% above close)
         low  = prices * 0.999   #fake low (0.1% below close)
@@ -167,7 +167,7 @@ class A2CStrategy(BaseStrategy):
 
     def update_data(self, market_state: Dict) -> None:
         self.market_data.update(market_state)
-        self.observation = self._build_observation()
+        self.observation = self.build_observation()
 
     def compute_signal(self) -> StrategySignal:
         if self.observation is None or not self.model_loaded:
