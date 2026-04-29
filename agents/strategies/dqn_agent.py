@@ -426,6 +426,19 @@ class DQNStrategy(BaseStrategy):
             metadata={"action": "HOLD", "inventory": self.current_inventory, "epsilon": self.epsilon, "q_values": q_np.tolist()},
         )
 
+    def analyze(self, state_dict: Dict) -> Dict:
+        """Adapter for TradingAgent which calls strategy.analyze(state)."""
+        self.update_data(state_dict)
+        signal = self.compute_signal()
+        # DQN price is already in integer cents (bid_cents / ask_cents)
+        return {
+            "action": signal.side.value if signal.side else None,
+            "side": signal.side,
+            "price": int(signal.price),
+            "quantity": signal.quantity,
+            "reason": signal.reason,
+        }
+
     def get_status(self) -> Dict[str, Any]:
         return {
             "name": "DQN Agent",

@@ -360,8 +360,9 @@
 
       if (status.started_at) setInfo(`Last start: ${status.started_at.replace("T", " ")}`);
       setError(status.last_error || "");
-    } catch (_) {
-      setInfo("Backend API unavailable – fallback mock mode.");
+    } catch (err) {
+      setInfo("Backend API unavailable.");
+      console.error("loadLiveData error:", err);
     }
   }
 

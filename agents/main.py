@@ -32,9 +32,21 @@ def main():
             strategy_class = BollingerBandsStrategy
             print("🎯 Using Bollinger Bands Strategy")
         elif strategy_name == "dqn":
-            from .strategies.dqn_agent import DQNStrategy
-            strategy_class = DQNStrategy
-            print("🎯 Using DQN Strategy")
+            try:
+                from .strategies.dqn_agent import DQNStrategy
+                strategy_class = DQNStrategy
+                print("🎯 Using DQN Strategy")
+            except ImportError as e:
+                print(f"❌ DQN requires PyTorch (pip install torch): {e}")
+                return
+        elif strategy_name == "ppo":
+            try:
+                from .strategies.PPO_agent import PPOStrategy
+                strategy_class = PPOStrategy
+                print("🎯 Using PPO Strategy")
+            except ImportError as e:
+                print(f"❌ PPO requires TensorFlow (pip install tensorflow): {e}")
+                return
         else:
             from .strategies.mean_reversion import MeanReversionStrategy
             strategy_class = MeanReversionStrategy
