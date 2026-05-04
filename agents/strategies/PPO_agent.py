@@ -37,16 +37,16 @@ class PPOStrategy(BaseStrategy):
         self.policy_network = None
 
         if not _TF_AVAILABLE:
-            print("⚠️  PPO: TensorFlow not installed. Running in HOLD mode.")
+            print("PPO: TensorFlow not installed. Running in HOLD mode.")
             return
 
         print(f"Loading PPO Policy Model from {policy_model_path}...")
         try:
             self.policy_network = tf.keras.models.load_model(policy_model_path, compile=False)
             self.model_loaded = True
-            print("✅ PPO model loaded successfully.")
+            print("PPO model loaded successfully.")
         except Exception as e:
-            print(f"⚠️  PPO: Failed to load model ({e}). Running in HOLD mode.")
+            print(f"PPO: Failed to load model ({e}). Running in HOLD mode.")
 
     def update_data(self, market_state: Dict) -> None:
         raw_mid = market_state.get("mid_price", 0)

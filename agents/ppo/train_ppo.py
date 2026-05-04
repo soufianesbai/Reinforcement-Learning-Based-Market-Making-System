@@ -328,46 +328,10 @@ class PPOAgent:
                 epoch_value_losses.append(float(value_loss))                                                                              
                 epoch_entropy_losses.append(float(entropy_loss))
 
-        self.policy_losses.append(np.mean(epoch_policy_losses))                                                                           
+        self.policy_losses.append(np.mean(epoch_policy_losses))
         self.value_losses.append(np.mean(epoch_value_losses))
-        self.entropy_losses.append(np.mean(epoch_entropy_losses))                                                                         
+        self.entropy_losses.append(np.mean(epoch_entropy_losses))
         self.losses.append(np.mean(epoch_policy_losses) + 0.5 * np.mean(epoch_value_losses) + np.mean(epoch_entropy_losses))
-
-        n = len(states)
-        for _ in range(self.epochs):
-            indices = np.random.permutation(n)
-            for start in range(0, n, self.batch_size):
-                idx = indices[start:start + self.batch_size]
-                
-                b_states = tf.gather(states, idx)
-                b_actions = tf.gather(actions, idx)
-                b_old_log_probs = tf.gather(old_log_probs, idx)
-                b_advantages = tf.gather(advantages, idx)
-                b_returns = tf.gather(returns, idx)
-
-                with tf.GradientTape() as tape:
-                    new_mus = self.policy_network(b_states, training=True)
-                    new_log_probs = self._log_prob(new_mus, b_actions, self.log_std)
-                    
-                    ratio = tf.exp(new_log_probs - b_old_log_probs)
-                    clipped = tf.clip_by_value(ratio, 1 - self.clip_range, 1 + self.clip_range)
-                    policy_loss = -tf.reduce_mean(tf.minimum(ratio * b_advantages, clipped * b_advantages))
-                    
-                    # Clipping pour éviter l'explosion de l'incertitude
-                    clipped_log_std = tf.clip_by_value(self.log_std, -10.0, 0.0)
-                    entropy = 0.5 * tf.reduce_sum(1.0 + tf.math.log(2 * np.pi * tf.exp(clipped_log_std * 2)))
-                    entropy_loss = -self.entropy_coeff * tf.reduce_mean(entropy)
-                    
-                    value_preds = tf.squeeze(self.value_network(b_states, training=True))
-                    value_loss = tf.reduce_mean(tf.square(b_returns - value_preds))
-                    
-                    loss = policy_loss + 0.5 * value_loss + entropy_loss
-
-                all_vars = self.policy_network.trainable_variables + self.value_network.trainable_variables + [self.log_std]
-                grads = tape.gradient(loss, all_vars)
-                grads = [tf.clip_by_norm(g, 0.5) if g is not None else g for g in grads]
-                self.optimizer.apply_gradients(zip(grads, all_vars))
-                self.losses.append(loss.numpy())
 
     def save(self, policy_path, value_path):
         self.policy_network.save(policy_path)
