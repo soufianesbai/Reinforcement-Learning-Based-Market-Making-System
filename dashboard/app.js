@@ -6,7 +6,7 @@
   let tvChart = null;
   let tvSeries = null;
   let isSwitchingSymbol = false;
-  let lastMetrics = { cash: null, inventory: null, trade_count: 0 };
+  let lastMetrics = { cash: null, inventory: null, trade_count: 0, inventory_per_product: {} };
   let lastHistory = { trades: 0, buys: 0, sells: 0, net: 0, sell_ratio: 0 };
 
   function renderLayout() {
@@ -222,6 +222,31 @@
     }
   }
 
+  function renderPortfolio(midPrice) {
+    const tbody = document.getElementById("portfolio-body");
+    if (!tbody) return;
+    const invMap = lastMetrics.inventory_per_product || {};
+    const entries = Object.entries(invMap).filter(([, qty]) => qty != null && qty !== 0);
+    if (entries.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" class="portfolio-empty">No open positions</td></tr>`;
+      return;
+    }
+    const currentProduct = document.getElementById("product-select")?.value || "";
+    tbody.innerHTML = entries.map(([product, qty]) => {
+      const asset = product.replace(/USDT$|BUSD$|BTC$|ETH$|BNB$/, "") || product;
+      const isCurrent = product === currentProduct;
+      const price = isCurrent && midPrice ? midPrice : null;
+      const value = price ? (qty * price).toFixed(2) : "--";
+      const priceStr = price ? price.toFixed(2) : "--";
+      return `<tr class="${isCurrent ? "portfolio-row-active" : ""}">
+        <td>${asset}</td>
+        <td>${Number(qty).toFixed(4)}</td>
+        <td>${priceStr}</td>
+        <td>${value !== "--" ? "$" + value : "--"}</td>
+      </tr>`;
+    }).join("");
+  }
+
   function renderDetailPanel() {
     const title = document.getElementById("detail-title");
     const grid = document.getElementById("detail-grid");
@@ -233,15 +258,21 @@
     const product = document.getElementById("product-select")?.value || "SOLUSDT";
     const baseAsset = product.replace(/USDT$|BUSD$|BTC$|ETH$|BNB$/, "") || product;
 
+    // Build per-product inventory rows
+    const invMap = lastMetrics.inventory_per_product || {};
+    const invItems = Object.entries(invMap)
+      .filter(([, qty]) => qty != null && qty !== 0)
+      .map(([prod, qty]) => {
+        const asset = prod.replace(/USDT$|BUSD$|BTC$|ETH$|BNB$/, "") || prod;
+        const current = prod === product;
+        return [`${asset}${current ? " ◀" : ""}`, Number(qty).toFixed(4)];
+      });
+    if (invItems.length === 0) invItems.push(["No positions", "—"]);
+
     const panels = {
       inventory: {
-        title: "Inventory Details",
-        items: [
-          ["Asset", baseAsset],
-          ["Quantity", fmt(lastMetrics.inventory)],
-          ["Bid Value", (lastMetrics.inventory != null && state.orderBook.bid != null && !isNaN(lastMetrics.inventory) && !isNaN(state.orderBook.bid)) ? `$${fmt(lastMetrics.inventory * state.orderBook.bid)}` : "--"],
-          ["Updated", new Date().toLocaleTimeString()],
-        ],
+        title: "Positions by Product",
+        items: invItems,
       },
       cash: {
         title: "Cash Details",
@@ -323,7 +354,7 @@
       const { market, trades, status, metrics, chart, history } = snap;
 
       applyMarketState(market);
-      lastMetrics = metrics;
+      lastMetrics = { ...metrics, _mid: market?.mid_price ? market.mid_price / 100 : null };
       lastHistory = history;
 
       const product = document.getElementById("product-select")?.value || "SOLUSDT";
@@ -333,6 +364,7 @@
 
       renderSidebarMetrics(metrics);
       renderDetailPanel();
+      renderPortfolio(market?.mid_price ? market.mid_price / 100 : null);
 
       state.tradeLog = Array.isArray(trades) ? trades : [];
       renderTradeLog();
@@ -366,6 +398,51 @@
     }
   }
 
+  function openPortfolioModal() {
+    let modal = document.getElementById("portfolio-modal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "portfolio-modal";
+      modal.className = "portfolio-modal-overlay";
+      modal.innerHTML = `
+        <div class="portfolio-modal">
+          <div class="portfolio-modal-header">
+            <h2>Portfolio — All Positions</h2>
+            <button class="portfolio-modal-close" id="portfolio-close">✕</button>
+          </div>
+          <table class="portfolio-table">
+            <thead><tr><th>Asset</th><th>Quantity</th><th>Mid Price</th><th>Value (USDT)</th></tr></thead>
+            <tbody id="portfolio-modal-body"></tbody>
+          </table>
+        </div>`;
+      document.body.appendChild(modal);
+      document.getElementById("portfolio-close").addEventListener("click", () => modal.remove());
+      modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+    }
+    const invMap = lastMetrics.inventory_per_product || {};
+    const currentProduct = document.getElementById("product-select")?.value || "";
+    const entries = Object.entries(invMap).filter(([, qty]) => qty != null && qty !== 0);
+    const tbody = document.getElementById("portfolio-modal-body");
+    if (entries.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" class="portfolio-empty">No open positions</td></tr>`;
+    } else {
+      tbody.innerHTML = entries.map(([product, qty]) => {
+        const asset = product.replace(/USDT$|BUSD$|BTC$|ETH$|BNB$/, "") || product;
+        const isCurrent = product === currentProduct;
+        const mid = isCurrent ? (lastMetrics._mid || null) : null;
+        const value = mid ? "$" + (qty * mid).toFixed(2) : "--";
+        const priceStr = mid ? mid.toFixed(2) : "--";
+        return `<tr class="${isCurrent ? "portfolio-row-active" : ""}">
+          <td>${asset}${isCurrent ? " <span class='portfolio-current-tag'>active</span>" : ""}</td>
+          <td>${Number(qty).toFixed(4)}</td>
+          <td>${priceStr}</td>
+          <td>${value}</td>
+        </tr>`;
+      }).join("");
+    }
+    modal.style.display = "flex";
+  }
+
   function bindSidebar() {
     const items = document.querySelectorAll(".stat-card");
     items.forEach((item) => {
@@ -373,7 +450,11 @@
         items.forEach((it) => it.classList.remove("active"));
         item.classList.add("active");
         activePanel = item.getAttribute("data-panel") || "inventory";
-        renderDetailPanel();
+        if (activePanel === "inventory") {
+          openPortfolioModal();
+        } else {
+          renderDetailPanel();
+        }
       });
     });
   }
