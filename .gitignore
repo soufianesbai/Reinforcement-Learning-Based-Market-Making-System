@@ -35,11 +35,8 @@ Thumbs.db
 
 #data/
 data/*
-agents/models_checkpoints/
-agents/ppo/models_checkpoints/*_ep*.keras
-!agents/ppo/models_checkpoints/*_FINAL.keras
+agents/ppo/models_checkpoints/
 agents/ppo/courbe_apprentissage.png
-agents/ppo/courbe_apprentissage_double_filled.png
 agents/exchange/config.py
 node_modules/
 test-results/

@@ -4,24 +4,28 @@ Usage: python -m agents.ppo.evaluate_ppo
 """
 
 import numpy as np
-import tensorflow as tf
+import torch
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
 
 try:
-    from .train_ppo import ContinuousBinanceEnv
+    from .train_ppo import ContinuousBinanceEnv, PolicyNetwork
 except ImportError:
-    from train_ppo import ContinuousBinanceEnv
+    from train_ppo import ContinuousBinanceEnv, PolicyNetwork
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def evaluate(csv_path, policy_path, num_episodes=50, volume_threshold=1000):
     env = ContinuousBinanceEnv(csv_path, volume_threshold=volume_threshold)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print(f"Chargement du modèle : {policy_path}")
-    policy_net = tf.keras.models.load_model(policy_path, compile=False)
+    input_dim = env.observation_space.shape[0]
+    policy_net = PolicyNetwork(input_dim).to(device)
+    policy_net.load_state_dict(torch.load(policy_path, map_location=device))
+    policy_net.eval()
 
     episode_pnls = []
     episode_trades = []
@@ -34,8 +38,9 @@ def evaluate(csv_path, policy_path, num_episodes=50, volume_threshold=1000):
         cash_curve = [0.0]
 
         while not done:
-            obs = np.expand_dims(state, axis=0)
-            action = policy_net(obs, training=False).numpy()[0]
+            obs = torch.FloatTensor(state).unsqueeze(0).to(device)
+            with torch.no_grad():
+                action = policy_net(obs).squeeze(0).cpu().numpy()
             action = np.clip(action, env.action_space.low, env.action_space.high)
             state, reward, done, _, _ = env.step(action)
             cash_curve.append(env.cash)
@@ -117,5 +122,5 @@ def evaluate(csv_path, policy_path, num_episodes=50, volume_threshold=1000):
 
 if __name__ == "__main__":
     csv_path = os.path.join(PROJECT_ROOT, "data", "SOLUSDT-aggTrades-2026-03.csv")
-    policy_path = os.path.join(PROJECT_ROOT, "agents", "ppo", "models_checkpoints", "ppo_policy_FINAL.keras")
+    policy_path = os.path.join(PROJECT_ROOT, "agents", "ppo", "models_checkpoints", "ppo_policy_FINAL.pth")
     evaluate(csv_path, policy_path, num_episodes=50, volume_threshold=5)
