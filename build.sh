@@ -21,6 +21,10 @@ if [ ! -f "CMakeCache.txt" ]; then
     cmake .. || { echo "❌ Erreur de configuration CMake!"; cd "$PROJECT_ROOT"; exit 1; }
 fi
 
+# Clean
+echo "🧹 make clean..."
+cmake --build . --target clean 2>/dev/null || true
+
 # Compiler
 echo "🔧 Compilation (Release)..."
 cmake --build . --config Release -j$(nproc)
