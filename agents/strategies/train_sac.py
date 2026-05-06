@@ -33,6 +33,8 @@ Early stop after PATIENCE episodes without improvement.
 import os
 import sys
 import time
+import csv
+import random
 from pathlib import Path
 
 import numpy as np
@@ -43,14 +45,21 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = ROOT / "training_data"
 MODEL_DIR = ROOT / "models"
 MODEL_PATH = MODEL_DIR / "sac_agent.pth"
+LAST_MODEL_PATH = MODEL_DIR / "sac_agent_last.pth"
 
 sys.path.insert(0, str(ROOT))
-from agents.strategies.sac_agent import SACAgent, STATE_DIM, ACTION_DIM, MAX_SPREAD_PCT
+from agents.strategies.sac_agent import (
+    SACAgent,
+    STATE_DIM,
+    ACTION_DIM,
+    MAX_SPREAD_PCT,
+    build_sac_state,
+)
 
 # ── Hyperparameters ───────────────────────────────────────────────────────────
 EPISODE_LEN = 240        # steps (4 hours of 1-min bars)
 HISTORY_LEN = 10         # bars of price history in state
-TOTAL_EPISODES = 2000
+TOTAL_EPISODES = int(os.getenv("SAC_TOTAL_EPISODES", "2000"))
 WARMUP_EPISODES = 20     # random policy before training starts
 UPDATES_PER_STEP = 2     # gradient steps per env step
 BATCH_SIZE = 256
@@ -58,7 +67,7 @@ REPLAY_CAPACITY = 500_000
 GAMMA = 0.99
 TAU = 0.005
 LR = 3e-4
-PATIENCE = 80            # early stopping
+PATIENCE = int(os.getenv("SAC_PATIENCE", "80"))            # early stopping
 VAL_EPISODES = 10        # episodes used to evaluate best reward
 
 # Market making parameters
@@ -67,6 +76,8 @@ MAX_INVENTORY = 5.0      # position cap (units)
 LAMBDA_INV = 0.1         # inventory penalty weight
 LAMBDA_ADVERSE = 0.05    # adverse selection penalty weight
 LIQD_COST_PCT = 0.001    # liquidation cost on terminal inventory
+SEED = int(os.getenv("SAC_SEED", "42"))
+CHECKPOINT_EVERY = int(os.getenv("SAC_CHECKPOINT_EVERY", "50"))
 
 
 # ── Data loading (same pipeline as train_lstm) ────────────────────────────────
@@ -158,7 +169,7 @@ class MarketMakingEnv:
     Simulates a market making agent in a 1-minute bar environment
     built from real Binance aggTrades data.
 
-    State (STATE_DIM = 16):
+        State (STATE_DIM = 15):
       [inventory_norm, log_ret×10, volatility, buyer_frac,
        market_spread_bps, vol_ratio]
 
@@ -207,15 +218,15 @@ class MarketMakingEnv:
         rng_bps = (float(bar[self.BAR_HIGH]) - float(bar[self.BAR_LOW])) / (mid + 1e-10) * 10000
         vol_ratio = float(bar[self.BAR_VOL_RATIO])
 
-        state = np.array([
-            inv_norm,
-            *np.clip(log_rets * 100, -5.0, 5.0),
-            np.clip(vol * 100, 0.0, 5.0),
-            np.clip(buyer_frac, 0.0, 1.0),
-            np.clip(rng_bps / 10.0, 0.0, 5.0),
-            np.clip(vol_ratio, 0.0, 5.0),
-        ], dtype=np.float32)
-        return state
+        return build_sac_state(
+            inventory=self.inventory,
+            log_rets=log_rets,
+            volatility=vol,
+            buyer_frac=buyer_frac,
+            market_spread_bps=rng_bps,
+            vol_ratio=vol_ratio,
+            inventory_scale=MAX_INVENTORY,
+        )
 
     def step(self, action: np.ndarray):
         """
@@ -302,7 +313,33 @@ def evaluate(agent: SACAgent, bars: np.ndarray, n_episodes: int = VAL_EPISODES
     return total / n_episodes
 
 
+def _save_checkpoint(path: Path, episode: int, agent: SACAgent, best_reward: float):
+    torch.save(
+        {
+            "episode": episode,
+            "actor_state_dict": agent.actor.state_dict(),
+            "critic_state_dict": agent.critic.state_dict(),
+            "log_alpha": agent.log_alpha.item(),
+            "best_reward": round(float(best_reward), 4),
+            "config": {
+                "state_dim": STATE_DIM,
+                "action_dim": ACTION_DIM,
+                "max_spread_pct": MAX_SPREAD_PCT,
+                "history_len": HISTORY_LEN,
+                "seed": SEED,
+            },
+        },
+        path,
+    )
+
+
 def train():
+    np.random.seed(SEED)
+    random.seed(SEED)
+    torch.manual_seed(SEED)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(SEED)
+
     if torch.cuda.is_available():
         device = torch.device("cuda")
     elif torch.backends.mps.is_available():
@@ -312,6 +349,7 @@ def train():
     print(f"\n{'='*60}")
     print("  SAC Market Maker — Training")
     print(f"  Device: {device}")
+    print(f"  Seed: {SEED}")
     print(f"  Episode length: {EPISODE_LEN} steps (4h of simulated market time per episode)")
     print(f"{'='*60}\n")
     train_start = time.time()
@@ -351,6 +389,7 @@ def train():
     best_val_reward = float("-inf")
     patience_counter = 0
     episode_rewards = []
+    train_metrics = []
 
     print(f"{'─'*60}")
     print(f"{'Ep':>5}  {'Ep Reward':>10}  {'Avg(20)':>8}  "
@@ -361,7 +400,7 @@ def train():
         state = env.reset()
         ep_reward = 0.0
         done = False
-        metrics_sum = {"critic_loss": 0.0, "actor_loss": 0.0, "alpha": 0.0}
+        metrics_sum = {"critic_loss": 0.0, "actor_loss": 0.0, "alpha": 0.0, "entropy": 0.0}
         n_updates = 0
 
         while not done:
@@ -387,6 +426,7 @@ def train():
 
         episode_rewards.append(ep_reward)
         avg20 = np.mean(episode_rewards[-20:])
+        val_reward = None
 
         # Validate every 10 episodes after warmup
         val_str = ""
@@ -398,25 +438,30 @@ def train():
                 best_val_reward = val_reward
                 patience_counter = 0
                 is_best = True
-                torch.save(
-                    {
-                        "episode": episode,
-                        "actor_state_dict": agent.actor.state_dict(),
-                        "critic_state_dict": agent.critic.state_dict(),
-                        "log_alpha": agent.log_alpha.item(),
-                        "best_reward": round(best_val_reward, 4),
-                        "config": {
-                            "state_dim": STATE_DIM, "action_dim": ACTION_DIM,
-                            "max_spread_pct": MAX_SPREAD_PCT,
-                            "history_len": HISTORY_LEN,
-                        },
-                    },
-                    MODEL_PATH,
-                )
+                _save_checkpoint(MODEL_PATH, episode, agent, best_val_reward)
             else:
                 patience_counter += 10
         else:
             val_str = f"{'':>10}"
+
+        if episode % CHECKPOINT_EVERY == 0:
+            _save_checkpoint(LAST_MODEL_PATH, episode, agent, best_val_reward)
+
+        avg_critic_loss = (metrics_sum["critic_loss"] / n_updates) if n_updates > 0 else float("nan")
+        avg_actor_loss = (metrics_sum["actor_loss"] / n_updates) if n_updates > 0 else float("nan")
+        avg_alpha = (metrics_sum["alpha"] / n_updates) if n_updates > 0 else float("nan")
+        avg_entropy = (metrics_sum["entropy"] / n_updates) if n_updates > 0 else float("nan")
+        train_metrics.append({
+            "episode": episode,
+            "episode_reward": float(ep_reward),
+            "avg20_reward": float(avg20),
+            "val_reward": float(val_reward) if val_reward is not None else "",
+            "updates": int(agent.updates),
+            "avg_critic_loss": float(avg_critic_loss) if np.isfinite(avg_critic_loss) else "",
+            "avg_actor_loss": float(avg_actor_loss) if np.isfinite(avg_actor_loss) else "",
+            "avg_alpha": float(avg_alpha) if np.isfinite(avg_alpha) else "",
+            "avg_entropy": float(avg_entropy) if np.isfinite(avg_entropy) else "",
+        })
 
         best_mark = " ✓" if is_best else ""
         print(
@@ -429,6 +474,8 @@ def train():
             break
 
     # ── Final test evaluation ──────────────────────────────────────────────
+    _save_checkpoint(LAST_MODEL_PATH, episode, agent, best_val_reward)
+
     if MODEL_PATH.exists():
         print(f"\n{'─'*70}")
         print(f"Best val reward: {best_val_reward:.4f}")
@@ -438,7 +485,8 @@ def train():
         if len(test_bars) >= EPISODE_LEN + HISTORY_LEN + 10:
             test_reward = evaluate(agent, test_bars, n_episodes=20)
             print(f"Test reward (20 episodes): {test_reward:.4f}")
-        print(f"\n✅ Model saved to {MODEL_PATH}")
+        print(f"\n✅ Best model saved to {MODEL_PATH}")
+        print(f"✅ Last model saved to {LAST_MODEL_PATH}")
     else:
         print("\n⚠️  No checkpoint saved (training may need more episodes).")
 
@@ -446,6 +494,110 @@ def train():
     h, rem = divmod(int(elapsed), 3600)
     m, s = divmod(rem, 60)
     print(f"\n⏱  Training time: {h}h {m}m {s}s")
+
+    # ── Save training metrics and curves ─────────────────────────────────
+    metrics_csv = MODEL_DIR / "sac_train_metrics.csv"
+    with metrics_csv.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            "episode",
+            "episode_reward",
+            "avg20_reward",
+            "val_reward",
+            "updates",
+            "avg_critic_loss",
+            "avg_actor_loss",
+            "avg_alpha",
+            "avg_entropy",
+        ])
+        writer.writeheader()
+        writer.writerows(train_metrics)
+    print(f"📝 Training metrics saved to {metrics_csv}")
+
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        def smooth(arr, win=20):
+            a = np.asarray(arr, dtype=np.float64)
+            if len(a) == 0:
+                return a
+            w = min(win, len(a))
+            if w <= 1:
+                return a
+            kernel = np.ones(w) / w
+            out = np.convolve(a, kernel, mode="valid")
+            pad = np.full(w - 1, out[0])
+            return np.concatenate([pad, out])
+
+        episodes = np.array([m["episode"] for m in train_metrics], dtype=np.int32)
+        rewards = np.array([m["episode_reward"] for m in train_metrics], dtype=np.float64)
+        avg20_rewards = np.array([m["avg20_reward"] for m in train_metrics], dtype=np.float64)
+        critic_losses = np.array([
+            float(m["avg_critic_loss"]) if m["avg_critic_loss"] != "" else np.nan
+            for m in train_metrics
+        ], dtype=np.float64)
+        actor_losses = np.array([
+            float(m["avg_actor_loss"]) if m["avg_actor_loss"] != "" else np.nan
+            for m in train_metrics
+        ], dtype=np.float64)
+        alphas = np.array([
+            float(m["avg_alpha"]) if m["avg_alpha"] != "" else np.nan
+            for m in train_metrics
+        ], dtype=np.float64)
+        entropies = np.array([
+            float(m["avg_entropy"]) if m["avg_entropy"] != "" else np.nan
+            for m in train_metrics
+        ], dtype=np.float64)
+        val_points = [(m["episode"], float(m["val_reward"])) for m in train_metrics if m["val_reward"] != ""]
+
+        fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+        fig.suptitle("SAC Training Curves", fontsize=14, fontweight="bold")
+
+        ax = axes[0, 0]
+        ax.plot(episodes, rewards, alpha=0.35, label="Episode reward")
+        ax.plot(episodes, avg20_rewards, linewidth=2, label="Avg(20)")
+        if val_points:
+            ve, vr = zip(*val_points)
+            ax.plot(ve, vr, marker="o", linewidth=1.5, label="Validation reward")
+        ax.set_title("Reward progression")
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("Reward")
+        ax.grid(alpha=0.3)
+        ax.legend()
+
+        ax = axes[0, 1]
+        ax.plot(episodes, smooth(np.nan_to_num(critic_losses, nan=0.0), 20), label="Critic loss")
+        ax.plot(episodes, smooth(np.nan_to_num(actor_losses, nan=0.0), 20), label="Actor loss")
+        ax.set_title("Training losses (smoothed)")
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("Loss")
+        ax.grid(alpha=0.3)
+        ax.legend()
+
+        ax = axes[1, 0]
+        ax.plot(episodes, np.nan_to_num(alphas, nan=np.nan), color="#8e44ad", label="alpha")
+        ax.plot(episodes, smooth(np.nan_to_num(entropies, nan=0.0), 20), color="#16a085", label="entropy")
+        ax.set_title("Entropy diagnostics")
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("Value")
+        ax.grid(alpha=0.3)
+        ax.legend()
+
+        ax = axes[1, 1]
+        updates = np.array([m["updates"] for m in train_metrics], dtype=np.float64)
+        ax.plot(episodes, updates, color="#2c3e50")
+        ax.set_title("Cumulative gradient updates")
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("Updates")
+        ax.grid(alpha=0.3)
+
+        plt.tight_layout()
+        curves_png = MODEL_DIR / "sac_train_curves.png"
+        plt.savefig(curves_png, dpi=150, bbox_inches="tight")
+        print(f"📈 Training curves saved to {curves_png}")
+    except Exception as exc:
+        print(f"⚠️  Could not generate training curves: {exc}")
 
 
 if __name__ == "__main__":

@@ -45,6 +45,28 @@ LOG_STD_MAX = 2
 ALPHA_FIXED = 0.2           # fixed entropy coeff (auto-tuning unstable for tiny action spaces)
 
 
+def build_sac_state(
+    inventory: float,
+    log_rets: np.ndarray,
+    volatility: float,
+    buyer_frac: float,
+    market_spread_bps: float,
+    vol_ratio: float,
+    inventory_scale: float,
+) -> np.ndarray:
+    """Builds the normalized SAC state vector used by both training and live inference."""
+    inv_scale = max(float(inventory_scale), 1e-6)
+    returns = np.asarray(log_rets, dtype=np.float32)
+    return np.array([
+        np.clip(float(inventory) / inv_scale, -1.0, 1.0),
+        *np.clip(returns * 100.0, -5.0, 5.0),
+        np.clip(float(volatility) * 100.0, 0.0, 5.0),
+        np.clip(float(buyer_frac), 0.0, 1.0),
+        np.clip(float(market_spread_bps) / 10.0, 0.0, 5.0),
+        np.clip(float(vol_ratio), 0.0, 5.0),
+    ], dtype=np.float32)
+
+
 # ── Networks ──────────────────────────────────────────────────────────────────
 
 def _mlp(in_dim: int, out_dim: int, hidden: int = 256) -> nn.Sequential:
@@ -261,11 +283,13 @@ class SACStrategy(BaseStrategy):
         quantity_per_trade: float = 0.1,
         history_len: int = 10,
         min_spread_asymmetry: float = 0.15,
+        inventory_norm_scale: float = 5.0,
     ):
         self.symbol = symbol
         self.quantity = quantity_per_trade
         self.model_path = model_path
         self.history_len = history_len
+        self.inventory_norm_scale = max(float(inventory_norm_scale), 1e-6)
         # Minimum asymmetry between bid/ask spread to trigger a trade
         self.min_asymmetry = min_spread_asymmetry
 
@@ -280,6 +304,11 @@ class SACStrategy(BaseStrategy):
         self._vol_history: deque = deque(maxlen=20)
         self._buyer_frac_history: deque = deque(maxlen=1)
         self._inventory: float = 0.0
+
+    def set_runtime_context(self, inventory: Optional[float] = None, cash: Optional[float] = None) -> None:
+        """Sync runtime fields from the orchestrator (TradingAgent)."""
+        if inventory is not None:
+            self._inventory = float(inventory)
 
     def _load_model(self):
         if not os.path.exists(self.model_path):
@@ -321,17 +350,24 @@ class SACStrategy(BaseStrategy):
         mean_vol = float(np.mean(vol_history)) if vol_history else 1.0
         vol_ratio = total_vol / (mean_vol + 1e-8)
 
-        state = np.array([
-            np.clip(self._inventory / 10.0, -1.0, 1.0),  # inventory_norm
-            *np.clip(log_rets * 100, -5.0, 5.0),          # 10 log returns
-            np.clip(volatility * 100, 0.0, 5.0),           # volatility
-            np.clip(buyer_frac, 0.0, 1.0),                 # buyer fraction
-            np.clip(market_spread_bps / 10.0, 0.0, 5.0),  # market spread
-            np.clip(vol_ratio, 0.0, 5.0),                  # volume ratio
-        ], dtype=np.float32)
-        return state
+        return build_sac_state(
+            inventory=self._inventory,
+            log_rets=log_rets,
+            volatility=volatility,
+            buyer_frac=buyer_frac,
+            market_spread_bps=market_spread_bps,
+            vol_ratio=vol_ratio,
+            inventory_scale=self.inventory_norm_scale,
+        )
 
     def update_data(self, market_state: Dict) -> None:
+        runtime_inventory = market_state.get("agent_inventory", market_state.get("inventory"))
+        if runtime_inventory is not None:
+            try:
+                self._inventory = float(runtime_inventory)
+            except (TypeError, ValueError):
+                pass
+
         self.market_data.update(market_state)
         mid = self.market_data.mid_price
         if mid > 0:

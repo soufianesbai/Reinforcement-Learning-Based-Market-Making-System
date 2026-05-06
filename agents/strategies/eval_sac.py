@@ -14,6 +14,7 @@ Outputs:
 """
 
 import sys
+import csv
 import numpy as np
 import torch
 from pathlib import Path
@@ -30,6 +31,7 @@ from agents.strategies.train_sac import (
 
 N_EPISODES   = 50
 FIXED_SPREAD = 0.002   # 0.2% each side for the symmetric baseline
+EVAL_SEEDS = [11, 22, 33, 44, 55]
 
 
 # ── Policies ──────────────────────────────────────────────────────────────────
@@ -119,6 +121,21 @@ def fixed_policy(state, rng):
     return np.array([FIXED_SPREAD, FIXED_SPREAD], dtype=np.float32)
 
 
+def wide_policy(state, rng):
+    return np.array([MAX_SPREAD_PCT, MAX_SPREAD_PCT], dtype=np.float32)
+
+
+def aggregate_runs(runs):
+    metric_names = ["mean", "std", "sharpe", "max_drawdown", "fill_rate", "max_inv"]
+    agg = {}
+    for m in metric_names:
+        vals = np.array([r[m] for r in runs], dtype=np.float64)
+        agg[m + "_mean"] = float(np.mean(vals))
+        agg[m + "_std"] = float(np.std(vals))
+    agg["representative"] = runs[0]
+    return agg
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
@@ -138,24 +155,56 @@ def main():
     policies = {
         "SAC (trained)": make_sac_policy(model_path, device),
         "Random":        random_policy,
+        f"Wide {MAX_SPREAD_PCT*100:.1f}%": wide_policy,
         f"Fixed {FIXED_SPREAD*100:.1f}%": fixed_policy,
     }
 
     results = {}
     for name, policy_fn in policies.items():
-        print(f"Evaluating {name}...", end=" ", flush=True)
-        results[name] = run_policy(policy_fn, test_bars)
+        print(f"Evaluating {name} on {len(EVAL_SEEDS)} seeds...", end=" ", flush=True)
+        runs = [run_policy(policy_fn, test_bars, seed=seed) for seed in EVAL_SEEDS]
+        results[name] = aggregate_runs(runs)
         print("done")
 
     # ── Print table ────────────────────────────────────────────────────────────
     print(f"\n{'─'*72}")
-    print(f"{'Policy':<22} {'Mean R':>8} {'Std R':>7} {'Sharpe':>7} "
-          f"{'MaxDD':>8} {'Fill%':>7} {'MaxInv':>7}")
+    print(f"{'Policy':<22} {'Mean R':>16} {'Sharpe':>16} "
+          f"{'MaxDD':>16} {'Fill%':>14} {'MaxInv':>14}")
     print(f"{'─'*72}")
     for name, r in results.items():
-        print(f"{name:<22} {r['mean']:>8.2f} {r['std']:>7.2f} {r['sharpe']:>7.3f} "
-              f"{r['max_drawdown']:>8.2f} {r['fill_rate']:>6.1f}% {r['max_inv']:>7.2f}")
+        print(
+            f"{name:<22} "
+            f"{r['mean_mean']:>7.2f}±{r['mean_std']:<7.2f} "
+            f"{r['sharpe_mean']:>7.3f}±{r['sharpe_std']:<7.3f} "
+            f"{r['max_drawdown_mean']:>7.2f}±{r['max_drawdown_std']:<7.2f} "
+            f"{r['fill_rate_mean']:>6.1f}%±{r['fill_rate_std']:<5.1f} "
+            f"{r['max_inv_mean']:>6.2f}±{r['max_inv_std']:<5.2f}"
+        )
     print(f"{'─'*72}")
+
+    summary_csv = ROOT / "models" / "sac_eval_summary.csv"
+    with summary_csv.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "policy",
+            "mean_reward_mean", "mean_reward_std",
+            "reward_std_mean", "reward_std_std",
+            "sharpe_mean", "sharpe_std",
+            "max_drawdown_mean", "max_drawdown_std",
+            "fill_rate_mean", "fill_rate_std",
+            "max_inventory_mean", "max_inventory_std",
+        ])
+        for name, r in results.items():
+            writer.writerow([
+                name,
+                r["mean_mean"], r["mean_std"],
+                r["std_mean"], r["std_std"],
+                r["sharpe_mean"], r["sharpe_std"],
+                r["max_drawdown_mean"], r["max_drawdown_std"],
+                r["fill_rate_mean"], r["fill_rate_std"],
+                r["max_inv_mean"], r["max_inv_std"],
+            ])
+    print(f"\n🧾 Summary CSV saved to {summary_csv}")
 
     # ── Plot ───────────────────────────────────────────────────────────────────
     try:
@@ -165,12 +214,17 @@ def main():
 
         fig, axes = plt.subplots(2, 2, figsize=(13, 9))
         fig.suptitle("SAC Market Maker — Backtest Evaluation", fontsize=14, fontweight="bold")
-        colors = {"SAC (trained)": "#4aa3ff", "Random": "#ff7043", f"Fixed {FIXED_SPREAD*100:.1f}%": "#66bb6a"}
+        colors = {
+            "SAC (trained)": "#4aa3ff",
+            "Random": "#ff7043",
+            f"Wide {MAX_SPREAD_PCT*100:.1f}%": "#95a5a6",
+            f"Fixed {FIXED_SPREAD*100:.1f}%": "#66bb6a",
+        }
 
         # 1. Cumulative reward
         ax = axes[0, 0]
         for name, r in results.items():
-            ax.plot(r["cumulative"], label=name, color=colors[name], linewidth=2)
+            ax.plot(r["representative"]["cumulative"], label=name, color=colors[name], linewidth=2)
         ax.set_title("Cumulative Reward")
         ax.set_xlabel("Episode")
         ax.set_ylabel("Cumulative reward")
@@ -179,7 +233,7 @@ def main():
 
         # 2. Per-episode reward distribution
         ax = axes[0, 1]
-        data = [r["rewards"] for r in results.values()]
+        data = [r["representative"]["rewards"] for r in results.values()]
         bp = ax.boxplot(data, labels=list(results.keys()), patch_artist=True)
         for patch, color in zip(bp["boxes"], colors.values()):
             patch.set_facecolor(color)
@@ -191,7 +245,11 @@ def main():
         # 3. Fill rate comparison
         ax = axes[1, 0]
         names = list(results.keys())
-        bid_rates = [r["bid_fills"] / (r["bid_fills"] + r["ask_fills"] + 1e-8) * 100 for r in results.values()]
+        bid_rates = [
+            r["representative"]["bid_fills"] /
+            (r["representative"]["bid_fills"] + r["representative"]["ask_fills"] + 1e-8) * 100
+            for r in results.values()
+        ]
         ask_rates = [100 - b for b in bid_rates]
         x = np.arange(len(names))
         w = 0.35
@@ -206,7 +264,7 @@ def main():
 
         # 4. Step reward histogram for SAC
         ax = axes[1, 1]
-        sac_steps = results["SAC (trained)"]["step_rewards"]
+        sac_steps = results["SAC (trained)"]["representative"]["step_rewards"]
         ax.hist(sac_steps, bins=60, color="#4aa3ff", alpha=0.8, edgecolor="none")
         ax.axvline(0, color="white", linewidth=1, linestyle="--")
         ax.set_title("SAC Step Reward Distribution")

@@ -28,7 +28,8 @@ TOTAL_RE = re.compile(r"Total:\s*\$(\d+(?:\.\d+)?)")
 UNIT_PRICE_RE = re.compile(r"Unit Price:\s*\$(\d+(?:\.\d+)?)")
 QTY_RE = re.compile(r"Quantity:\s*(\d+(?:\.\d+)?)")
 CASH_RE = re.compile(r"\s*Cash:\s*\$(\d+(?:\.\d+)?)")
-INVENTORY_RE = re.compile(r"\s*Inventory:\s*(\d+(?:\.\d+)?)") 
+INITIAL_CASH_RE = re.compile(r"Initial USDT balance:\s*(\d+(?:\.\d+)?)")
+INVENTORY_RE = re.compile(r"\s*Inventory:\s*(\d+(?:\.\d+)?)")
 
 state_lock = threading.Lock()
 process_state = {
@@ -183,7 +184,7 @@ def _pid_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
         return True
-    except ProcessLookupError:
+    except OSError:
         return False
 
 
@@ -302,10 +303,13 @@ def read_trade_log(limit: int = 25):
     pending_qty = None
     pending_price = None
 
+    offset = process_state.get("agent_log_offset", 0)
     with AGENT_LOG_FILE.open("rb") as f:
         f.seek(0, 2)
         size = f.tell()
-        f.seek(max(0, size - 65536))
+        # Read only from current agent session, capped at 64 KB
+        start = max(offset, size - 65536)
+        f.seek(start)
         session_text = f.read().decode("utf-8", errors="ignore")
 
     for raw in session_text.splitlines():
@@ -434,7 +438,9 @@ def read_snapshot():
         return {"market": empty_market, "trades": [], "performance": {"series": [], "ticks": []},
                 "status": status, "metrics": {"cash": None, "inventory": None, "trade_count": 0},
                 "logs": {"agent": [], "market": []}, "chart": empty_chart,
-                "history": {"trades": 0, "buys": 0, "sells": 0, "net": 0.0, "sell_ratio": 0.0}}
+                "history": {"trades": 0, "buys": 0, "sells": 0, "net": 0.0, "sell_ratio": 0.0,
+                            "win_rate": 0.0, "avg_profit": 0.0, "avg_loss": 0.0},
+                "last_decision": {"action": "HOLD", "time": "—"}, "username": "anonymous"}
 
     metrics = read_runtime_metrics()
     market = read_market_state(metrics=metrics)
@@ -528,18 +534,19 @@ def read_runtime_metrics():
     tail = current_content[-8192:].decode("utf-8", errors="ignore")
     for line in tail.splitlines():
         line = strip_ansi(line)
-        m = CASH_RE.search(line)
+        m = CASH_RE.search(line) or INITIAL_CASH_RE.search(line)
         if m:
             latest_cash = float(m.group(1))
         m = INVENTORY_RE.search(line)
         if m:
             latest_inventory = float(m.group(1))
 
-    # Persist inventory per product
+    # Persist inventory per product (only write to disk if value changed)
     current_product = process_state["product"]
     if latest_inventory is not None:
-        inventory_per_product[current_product] = latest_inventory
-        save_inventory()
+        if inventory_per_product.get(current_product) != latest_inventory:
+            inventory_per_product[current_product] = latest_inventory
+            save_inventory()
 
     return {
         "cash": latest_cash,

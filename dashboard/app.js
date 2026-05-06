@@ -259,7 +259,7 @@
       }
     }
     if (history) {
-      if (metrics.trade_count == null || isNaN(metrics.trade_count) || metrics.trade_count === 0) {
+      if (metrics.trade_count == null || isNaN(metrics.trade_count)) {
         history.textContent = "--";
         history.classList.add("disabled-metric");
       } else {

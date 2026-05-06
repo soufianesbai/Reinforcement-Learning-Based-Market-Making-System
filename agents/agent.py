@@ -202,6 +202,14 @@ class TradingAgent:
                     print(" Waiting for market state from C++...")
                     time.sleep(0.5)
                     continue
+
+                # Inject runtime context so strategies can build state from real inventory/cash.
+                state["agent_inventory"] = self.inventory
+                state["agent_cash"] = self.cash
+                state["agent_symbol"] = self.symbol
+
+                if hasattr(self.strategy, "set_runtime_context"):
+                    self.strategy.set_runtime_context(inventory=self.inventory, cash=self.cash)
                 
                 iteration += 1
                 
