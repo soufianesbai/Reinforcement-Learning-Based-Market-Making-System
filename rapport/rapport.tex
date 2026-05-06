@@ -567,16 +567,155 @@ HFT extrême).
 
 \subsection{Apprentissage des agents RL}
 
-\subsubsection{A2C}
+\subsubsection{Advqntage Actor Critic (A2C)}
+\label{sec:a2c}
+
+\paragraph{Principe de l'algorithme}\mbox{} \\
+
+L'agent \textit{Advantage Actor-Critic} (A2C) combine deux réseaux de neurones :
+un \textbf{acteur} qui choisit l'action à exécuter, et un \textbf{critique}
+qui estime la valeur de l'état courant. L'objectif de l'acteur est de
+maximiser la récompense attendue, tandis que le critique apprend à prédire
+la valeur du retour observé afin de réduire la variance de l'apprentissage.
+
+Dans notre implémentation, l'espace d'actions est discret et contient trois
+actions possibles :
+\[
+\mathcal{A} = \{\text{HOLD}, \text{BUY}, \text{SELL}\}.
+\]
+L'agent reçoit à chaque pas de temps un état de dimension 121, construit à
+partir des dernières bougies de volume et de l'inventaire courant.
 
 \begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{figures/a2c_training_metrics.png}
-    \caption{Courbes d'apprentissage de l'agent A2C
-             (loss, récompense, PnL).}
-    \label{fig:a2c}
+\centering
+\includegraphics[width=0.75\textwidth]{figures/Advantage-Actor-Critic-A2C-architecture.png}
+\caption{Principe général de l'architecture Actor-Critic utilisée pour A2C.}
+\label{fig:a2c_architecture}
 \end{figure}
 
+\paragraph{Représentation de l'état} \mbox{} \\
+
+L'observation fournie à l'agent est composée de quatre blocs de 30 valeurs
+normalisées, auxquels s'ajoute une valeur scalaire correspondant à
+l'inventaire :
+\[
+s_t = \big[\text{close}_{t-29:t},\ \text{high}_{t-29:t},\ \text{low}_{t-29:t},\ \text{volume}_{t-29:t},\ \text{inventory}_t\big].
+\]
+Chaque bloc est normalisé par rapport à la dernière clôture de la fenêtre,
+ce qui permet de rendre l'apprentissage plus stable et plus robuste aux
+variations d'échelle du prix.
+
+\paragraph{Fonction de récompense}\mbox{} \\
+
+La récompense est calculée à chaque pas de temps en fonction de la variation de la valeur du portefeuille, tout en intégrant une gestion du risque liée à l'exposition. 
+
+\subparagraph{1. Valeur du portefeuille}\mbox{} \\
+La valeur totale du portefeuille à l'instant $t$, notée $V_t$, est définie par la somme des liquidités et de la valeur de l'inventaire au prix de clôture :
+\[
+V_t = \text{cash}_t + (I_t \cdot P_t)
+\]
+où :
+\begin{itemize}
+    \item $\text{cash}_t$ représente les liquidités accumulées (achats et ventes).
+    \item $I_t$ est l'inventaire, soit le nombre de contrats détenus.
+    \item $P_t$ est le prix de clôture de la bougie de volume actuelle.
+\end{itemize}
+
+\subparagraph{2. Calcul de la récompense instantanée}\mbox{} \\
+La récompense $r_t$ repose sur le profit ou la perte latent (\textit{Step PnL}) ajusté par une pénalité d'inventaire quadratique :
+\[
+r_t = \text{clip}\left( (V_t - V_{t-1}) - \lambda I_t^2 P_t, \, -10, \, 10 \right)
+\]
+\begin{itemize}
+    \item \textbf{Variation de PnL} ($V_t - V_{t-1}$) : L'agent est récompensé si la valeur totale de ses actifs augmente.
+    \item \textbf{Pénalité d'inventaire} ($\lambda I_t^2 P_t$) : Pour limiter le risque directionnel, une pénalité est appliquée avec un coefficient $\lambda = 0.0001$. Cette pénalité augmente de façon non linéaire avec la taille de la position.
+    \item \textbf{Écrêtage (Clipping)} : La récompense est contrainte dans l'intervalle $[-10, 10]$ pour stabiliser l'apprentissage du modèle A2C.
+\end{itemize}
+
+\subparagraph{3. Conditions d'exécution}\mbox{} \\
+La mise à jour de $V_t$ dépend de l'exécution des ordres \textit{limit} placés par l'agent :
+\begin{itemize}
+    \item Un \textbf{achat} est validé si le prix bas de la bougie atteint le prix bid de l'agent : $P_{\text{low}} \le P_{\text{bid\_agent}}$.
+    \item Une \textbf{vente} est validée si le prix haut de la bougie atteint le prix ask de l'agent : $P_{\text{high}} \ge P_{\text{ask\_agent}}$.
+\end{itemize}
+\paragraph{Perte d'apprentissage}\mbox{} \\
+
+L'apprentissage de l'acteur repose sur l'avantage :
+\[
+A_t = R_t - V(s_t),
+\]
+où \(R_t\) représente le retour observé et \(V(s_t)\) la valeur estimée par
+le critique. La perte de l'acteur s'écrit :
+\[
+\mathcal{L}_{actor} =
+-\log \pi_\theta(a_t \mid s_t)\, A_t
+- \beta \, \mathcal{H}\big(\pi_\theta(\cdot \mid s_t)\big),
+\]
+avec \(\beta\) le coefficient d'entropie et \(\mathcal{H}\) l'entropie de la
+politique. Le terme d'entropie évite que la politique devienne trop vite
+déterministe.
+
+La perte du critique est une erreur quadratique moyenne entre la valeur
+prédite et le retour observé :
+\[
+\mathcal{L}_{critic} = \big(R_t - V(s_t)\big)^2.
+\]
+
+\paragraph{Coefficient d'entropie}\mbox{} \\
+
+Le coefficient d'entropie n'est pas fixé dans l'absolu : il peut être
+constant ou décroître au cours de l'entraînement. Un coefficient plus élevé
+favorise l'exploration, tandis qu'un coefficient plus faible pousse l'agent
+à exploiter davantage les stratégies déjà apprises.
+
+Dans notre cas, une décroissance progressive du coefficient d'entropie peut
+être utilisée pour encourager l'exploration au début, puis stabiliser la
+politique sur la fin de l'entraînement.
+
+\paragraph{Architecture du modèle}\mbox{} \\
+
+L'acteur et le critique utilisent des réseaux multicouches entièrement
+connectés. L'acteur produit des logits pour les trois actions possibles,
+puis une loi de probabilité catégorielle est construite à partir de ces logits.
+L'action est ensuite échantillonnée pendant l'entraînement et choisie de
+manière gloutonne lors de l'inférence.
+
+Le critique estime une valeur scalaire à partir de l'état courant. Cette
+estimation sert à calculer l'avantage et à guider la mise à jour des poids
+du réseau de politique.
+
+\paragraph{Résultats d'entraînement}\mbox{} \\
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/a2c_training_metrics.png}
+\caption{Métriques d'entraînement de l'agent A2C sur les données de trading discrètes.}
+\label{fig:a2c_metrics}
+\end{figure}
+
+
+Les métriques d'entraînement montrent que l'agent A2C apprend effectivement une politique non triviale, mais que sa performance reste encore limitée. La courbe de récompense présente d'abord une forte instabilité, puis une amélioration progressive de la moyenne mobile en fin d'entraînement. Cette évolution indique que l'agent parvient à éviter une partie des comportements les plus défavorables, sans pour autant atteindre une rentabilité durablement positive.
+
+Le \textbf{\textit{critic loss}} décroît de manière nette au cours de l'apprentissage, ce qui suggère que le réseau critique 
+améliore progressivement son estimation de la valeur des états. Cette baisse est un signal positif, car un critique 
+plus précis fournit un avantage plus utile à l'acteur. Pourtant, elle reste encore relativement élevée, ce qui peut 
+indiquer que le modèle n'est pas encore suffisamment expressif ou que les données d'entraînement sont trop bruyantes 
+pour permettre une bonne généralisation.
+
+Le \textbf{\textit{policy loss}} se stabilise autour de zéro après une phase initiale très bruitée. Cela traduit un apprentissage
+ moins erratique et une politique qui cesse progressivement de changer de façon agressive. 
+ Toutefois, une perte d'acteur proche de zéro ne signifie pas nécessairement que la stratégie est 
+ performante ; elle indique surtout que les mises à jour deviennent plus faibles et plus régulières.
+
+La distribution des actions montre que l'agent n'est plus bloqué sur une seule décision. 
+Les actions \textbf{HOLD}, \textbf{BUY} et \textbf{SELL} sont toutes présentes en proportions comparables, ce qui est un bon signe du point 
+de vue de l'exploration et de l'utilisation de l'espace d'actions. Néanmoins, la présence encore importante 
+de \textbf{HOLD} peut aussi refléter une certaine prudence de la politique, voire une difficulté à trouver des 
+opportunités réellement profitables.
+
+Dans l'ensemble, ces résultats suggèrent que l'architecture A2C est fonctionnelle et apprend quelque chose de cohérent, 
+mais que la stratégie n'est pas suffisamment robuste pour être considérée comme rentable. 
+Le modèle semble avoir appris à se stabiliser, mais pas encore à extraire un avantage clair du marché.
 % TODO: Discuter en détail :
 %   - comportement initial (exploration aléatoire)
 %   - point d'inflexion de la courbe de récompense
