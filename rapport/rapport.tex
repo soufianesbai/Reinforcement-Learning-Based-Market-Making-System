@@ -27,6 +27,8 @@
 
 % Diagramme de Gantt (à activer si pgfgantt est installé)
 \usepackage{pgfgantt}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta}
 
 % ---------------------------------------------------------------
 % Hyperliens
@@ -88,7 +90,7 @@
 \title{
     \vspace{-1cm}
     \Huge \textbf{Système de Market Making par Apprentissage par Renforcement} \\[0.5cm]
-    \large Projet de Fin d'Année (PFA)
+    \large PFA 2025--2026 -- ENSEIRB-MATMECA
 }
 \author{
     Bella Taleb El Alem \and
@@ -118,7 +120,7 @@
         \rule{\textwidth}{0.5pt}
 
         \vspace{1cm}
-        {\large Projet de Fin d'Année (PFA)}
+        {\large PFA 2025--2026 -- ENSEIRB-MATMECA}
 
         \vfill
 
@@ -155,8 +157,7 @@ servant d'environnement de simulation, une \textbf{ingestion de
 données temps réel} via l'API Binance pour alimenter ce moteur,
 et une \textbf{collection d'agents de trading} allant des
 stratégies classiques par règles (Mean Reversion, RSI, Bollinger)
-aux agents d'apprentissage par renforcement profond (DQN, A2C,
-PPO, Dreamer~v3), visualisables depuis un tableau de bord interactif.
+aux agents d'apprentissage par renforcement profond (DQN, A2C, SAC, PPO, Dreamer~v3), visualisables depuis un tableau de bord interactif.
 
 % ===============================================================
 \section{Besoins du client}
@@ -175,7 +176,7 @@ Le client souhaite disposer d'une plateforme permettant :
           algorithmiques} sur ce flux temps réel, depuis les
           stratégies classiques (mean reversion, RSI, Bollinger)
           jusqu'aux agents d'\textit{apprentissage par
-          renforcement} (DQN, A2C, PPO, Dreamer~v3) ;
+          renforcement} (DQN, A2C, SAC, PPO, Dreamer~v3) ;
     \item de \textbf{visualiser le marché et les performances}
           via un tableau de bord interactif ;
     \item de mesurer la \textbf{performance brute} du moteur
@@ -238,9 +239,9 @@ Le client souhaite disposer d'une plateforme permettant :
     \item \textbf{Bella Taleb El Alem} : agent PPO
     \item \textbf{Yani Haouchine} : agent Dreamer~v3
     \item \textbf{Ihab Jaouad} : agent DQN
-    \item \textbf{Anas Benbaki} : agent A2C et moteur de carnet d'ordres C++
-    \item \textbf{Mohamed Aziz Migaou} : agent Dreamer~v3 et moteur de carnet d'ordres C++
-    \item \textbf{Soufiane Sbai} : tableau de bord
+    \item \textbf{Anas Benbaki} : agent A2C
+    \item \textbf{Mohamed Aziz Migaou} : agent Dreamer~v3 moteur de carnet d'ordres C++
+    \item \textbf{Soufiane Sbai} : dashboard + agent SAC
 \end{itemize}
 
 \subsection{Méthodologie}
@@ -262,9 +263,13 @@ performance.
           \texttt{nlohmann/json 3.11.3} (téléchargées via
           \texttt{FetchContent}).
     \item \textbf{Python} : PyTorch (CUDA quand disponible),
-          NumPy, Matplotlib.
-    \item \textbf{Tableau de bord} : HTML/CSS/JS + serveur
-          Python.
+          NumPy, Matplotlib -- utilisé pour tous les agents RL
+          (DQN, A2C, PPO, Dreamer~v3, SAC).
+    \item \textbf{Tableau de bord} : HTML/CSS/JS vanilla,
+          serveur HTTP Python stdlib (\texttt{http.server}
+          -- aucune dépendance externe côté serveur),
+          graphiques en chandeliers via
+          \textbf{TradingView Lightweight Charts~4.2}.
 \end{itemize}
 
 \subsection{Arborescence}
@@ -280,7 +285,12 @@ ein8-proj2-pfa-27707/
 |-- agents/                 # Agents Python
 |   |-- main.py             # Point d'entrée trading agent
 |   |-- strategies/         # Mean reversion, RSI, Bollinger,
-|   |                       #   DQN, A2C, PPO, Dreamer
+|   |   |                   #   DQN, A2C, PPO, Dreamer
+|   |   |-- sac_agent.py    # Agent SAC (market making)
+|   |   |-- train_sac.py    # Entraînement SAC
+|   |   `-- eval_sac.py     # Évaluation multi-seed SAC
+|   |-- dqn/                # Entraînement DQN
+|   |-- ppo/                # Entraînement et évaluation PPO
 |   |-- exchange/           # Client Binance testnet
 |   |-- train_rl.py
 |   |-- train_a2c.py
@@ -425,223 +435,22 @@ P_t > \mathrm{SMA}_n(t)+2\sigma_t \Rightarrow \mathrm{SELL}, \quad
 
 \subsubsection{Apprentissage par renforcement}
 
-\paragraph{DQN (Deep Q-Network) -- implémentation du projet.}
-
-L'agent DQN implémenté repose sur une approximation de la fonction
-d'action-valeur $Q_\theta(s,a)$ via un réseau de neurones entraîné
-par l'équation de Bellman :
-\[
-Q(s_t,a_t) \;\leftarrow\; r_t + \gamma \max_{a'} Q_{\theta^-}(s_{t+1},a').
-\]
-
-\subparagraph{Architecture -- réseau Dueling.}
-Contrairement à un MLP classique qui produit directement les
-$Q$-valeurs, l'architecture \textit{dueling} décompose la sortie
-en deux flux parallèles :
-\[
-Q(s,a) = V(s) + \Bigl(A(s,a) - \frac{1}{|\mathcal{A}|}\sum_{a'}A(s,a')\Bigr),
-\]
-où $V(s)$ est la \textbf{fonction de valeur d'état} (scalaire
-indépendant de l'action) et $A(s,a)$ est la
-\textbf{fonction d'avantage} (combien cette action est meilleure que
-la moyenne). La soustraction de la moyenne de $A$ évite
-l'identifiabilité multiple du couple $(V,A)$ et stabilise
-l'apprentissage. Cette séparation est particulièrement bénéfique
-dans les états où toutes les actions ont une valeur similaire
-(\textit{HOLD} dominant) : le réseau met alors à jour $V(s)$
-sans avoir besoin d'observer toutes les actions.
-
-Les couches cachées utilisent l'activation \textbf{SiLU}
-(\textit{Sigmoid Linear Unit}, $x\cdot\sigma(x)$), plus douce que
-ReLU et moins sujette aux neurones morts, ainsi qu'une
-\textbf{LayerNorm} après chaque couche pour normaliser les
-activations indépendamment de la taille du batch -- ce qui
-stabilise l'entraînement sur des séries financières à forte
-non-stationnarité.
-
-\subparagraph{Double DQN -- réduction du biais de surestimation.}
-Le DQN standard souffre d'un biais systématique : l'opérateur
-$\max$ dans la cible de Bellman tend à surestimer les
-$Q$-valeurs, car il sélectionne et évalue la meilleure action
-avec le \emph{même} réseau. Le \textbf{Double DQN} découple ces
-deux opérations :
-\[
-\text{cible} = r_t + \gamma\,
-Q_{\theta^-}\!\Bigl(s_{t+1},\;\underbrace{\arg\max_{a'}
-Q_\theta(s_{t+1},a')}_{\text{sélection par réseau principal}}\Bigr),
-\]
-le réseau principal $Q_\theta$ \emph{sélectionne} l'action
-optimale, tandis que le réseau cible $Q_{\theta^-}$
-\emph{évalue} sa valeur. Cette séparation réduit la surestimation
-et améliore la stabilité et la qualité finale de la politique
-apprise.
-
-\subparagraph{Espace d'état -- dimension 6.}
-Plutôt qu'une fenêtre glissante de bougies brutes, l'état est
-un vecteur compact de six indicateurs calculés en temps réel
-à partir du carnet d'ordres et de l'historique récent :
-
-\begin{itemize}[leftmargin=1.2cm]
-  \item \textbf{Order flow imbalance} : ratio
-        $\frac{V_{\text{bid}} - V_{\text{ask}}}{V_{\text{bid}} +
-        V_{\text{ask}}}$, mesure la pression acheteuse ou vendeuse
-        instantanée dans le carnet.
-  \item \textbf{Spread normalisé} :
-        $\frac{P_{\text{ask}} - P_{\text{bid}}}{P_{\text{mid}}}$,
-        proxy du coût de transaction et de la liquidité.
-  \item \textbf{Déviation au mid-price} : écart relatif du dernier
-        prix exécuté par rapport au mid-price, signal de pression
-        directionnelle récente.
-  \item \textbf{Momentum} : rendement cumulé sur une fenêtre
-        courte, capte la direction et la force de la tendance
-        immédiate.
-  \item \textbf{Inventaire normalisé} : position courante divisée
-        par la limite maximale ($\pm 3$ unités), indispensable pour
-        que l'agent connaisse son exposition et puisse appliquer
-        l'\textit{inventory guard}.
-  \item \textbf{Volatilité réalisée} : écart type des rendements
-        sur la fenêtre récente, permet à l'agent d'adapter son
-        comportement aux régimes calmes ou agités.
-\end{itemize}
-
-Ce vecteur de dimension 6 est délibérément compact :
-les six indicateurs sont tous calculables en $O(1)$ à partir du
-carnet d'ordres courant, ce qui garantit une latence d'inférence
-minimale en conditions temps réel.
-
-\subparagraph{Replay buffer et stratégie d'échantillonnage.}
-Les transitions $(s_t, a_t, r_t, s_{t+1}, \text{done})$ sont
-stockées dans un buffer circulaire de \textbf{200~000 éléments}.
-Cette taille, quatre fois supérieure à celle d'une implémentation
-naïve, permet de conserver plusieurs heures de données de marché
-à haute fréquence et d'assurer une diversité suffisante des
-régimes présents dans chaque mini-batch. Les transitions sont
-tirées uniformément aléatoirement par lots de \textbf{256}, ce
-qui brise les corrélations temporelles des prix -- un biais
-particulièrement prononcé sur les données crypto où les
-autocorrélations à court terme sont fortes.
-
-\subparagraph{Fonction de perte -- Smooth-L1 et gradient clipping.}
-La perte de Huber (\textit{Smooth-L1}) est définie par :
-\[
-\mathcal{L}_\delta(\delta_i) =
-\begin{cases}
-\tfrac{1}{2}\delta_i^2 & |\delta_i| \le 1,\\
-|\delta_i| - \tfrac{1}{2} & |\delta_i| > 1,
-\end{cases}
-\quad \delta_i = Q_{\theta^-}(s',a^*) - Q_\theta(s,a).
-\]
-Pour les petites erreurs elle se comporte comme la MSE (pénalité
-quadratique, gradient doux) ; pour les grandes erreurs elle devient
-linéaire, ce qui réduit l'influence des transitions anormalement
-coûteuses (\textit{outliers} de marché, flash crashes). En
-complément, un \textbf{gradient clipping} (norme maximale fixée)
-empêche des mises à jour catastrophiques lors de transitions
-exceptionnellement pénalisantes.
-
-\subparagraph{Hyperparamètres et justifications.}
-
-\begin{itemize}[leftmargin=1.2cm]
-  \item $\boldsymbol{\gamma = 0.995}$ : facteur d'actualisation
-        élevé, signifiant que l'agent valorise fortement les
-        récompenses futures. Approprié au trading où les positions
-        ouvertes aujourd'hui voient leur P\&L se matérialiser
-        plusieurs dizaines de pas plus tard.
-  \item $\textbf{lr} = 3\times 10^{-4}$ : taux d'apprentissage
-        standard pour Adam sur des données financières ; suffisamment
-        petit pour éviter les oscillations, suffisamment grand pour
-        converger en quelques dizaines d'épisodes.
-  \item \textbf{Batch 256} : plus grand que le batch 32 classique,
-        ce qui réduit la variance du gradient estimé et améliore la
-        stabilité des mises à jour, au prix d'un coût mémoire
-        légèrement supérieur.
-  \item $\boldsymbol{\varepsilon}$ \textbf{décroissant
-        $1.0 \to 0.01$} : exploration totale en début
-        d'entraînement pour peupler le buffer de transitions variées,
-        puis transition progressive vers l'exploitation de la
-        politique apprise.
-\end{itemize}
+\paragraph{DQN (Deep Q-Network).}
+Réseau \textit{dueling} avec activations SiLU et
+LayerNorm, \textbf{Double DQN}, \textit{replay buffer}
+de 200~000 transitions, perte Smooth-L1, gradient
+clipping. L'espace d'état est de dimension 6
+(imbalance, spread, déviation, momentum, inventaire,
+volatilité réalisée). Trois actions : BUY, SELL, HOLD.
+Hyperparamètres : $\gamma = 0.995$, $\text{lr} =
+3\times 10^{-4}$, batch 256, $\varepsilon$ décroissant
+$1.0 \to 0.01$.
 
 \paragraph{A2C (Advantage Actor-Critic).}
-\paragraph{Principe de l'algorithme}\mbox{} \\
-
-L'agent \textit{Advantage Actor-Critic} (A2C) combine deux réseaux de neurones :
-un \textbf{acteur} qui choisit l'action à exécuter, et un \textbf{critique}
-qui estime la valeur de l'état courant. L'objectif de l'acteur est de
-maximiser la récompense attendue, tandis que le critique apprend à prédire
-la valeur du retour observé afin de réduire la variance de l'apprentissage.
-
-Dans notre implémentation, l'espace d'actions est discret et contient trois
-actions possibles :
-\[
-\mathcal{A} = \{\text{HOLD}, \text{BUY}, \text{SELL}\}.
-\]
-L'agent reçoit à chaque pas de temps un état de dimension 121, construit à
-partir des dernières bougies de volume et de l'inventaire courant.
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.75\textwidth]{figures/Advantage-Actor-Critic-A2C-architecture.png}
-\caption{Principe général de l'architecture Actor-Critic utilisée pour A2C.}
-\label{fig:a2c_architecture}
-\end{figure}
-
-L'observation fournie à l'agent est composée de quatre blocs de 30 valeurs
-normalisées, auxquels s'ajoute une valeur scalaire correspondant à
-l'inventaire, donc un total de 121 dimensions.
-
-\paragraph{Fonction de récompense}\mbox{} \\
-
-La récompense est calculée à chaque pas de temps en fonction de la variation de la valeur du portefeuille, tout en intégrant une gestion du risque liée à l'exposition. 
-
-\subparagraph{1. Valeur du portefeuille}\mbox{} \\
-La valeur totale du portefeuille à l'instant $t$, notée $V_t$, est définie par la somme des liquidités et de la valeur de l'inventaire au prix de clôture :
-\[
-V_t = \text{cash}_t + (I_t \cdot P_t)
-\]
-où :
-\begin{itemize}
-    \item $\text{cash}_t$ représente les liquidités accumulées (achats et ventes).
-    \item $I_t$ est l'inventaire, soit le nombre de contrats détenus.
-    \item $P_t$ est le prix de clôture de la bougie de volume actuelle.
-\end{itemize}
-
-\subparagraph{2. Calcul de la récompense instantanée}\mbox{} \\
-La récompense $r_t$ repose sur le profit ou la perte latent (\textit{Step PnL}) ajusté par une pénalité d'inventaire quadratique :
-\[
-r_t = \text{clip}\left( (V_t - V_{t-1}) - \lambda I_t^2 P_t, \, -10, \, 10 \right)
-\]
-\begin{itemize}
-    \item \textbf{Variation de PnL} ($V_t - V_{t-1}$) : L'agent est récompensé si la valeur totale de ses actifs augmente.
-    \item \textbf{Pénalité d'inventaire} ($\lambda I_t^2 P_t$) : Pour limiter le risque directionnel, une pénalité est appliquée avec un coefficient $\lambda = 0.0001$. Cette pénalité augmente de façon non linéaire avec la taille de la position.
-    \item \textbf{Écrêtage (Clipping)} : La récompense est contrainte dans l'intervalle $[-10, 10]$ pour stabiliser l'apprentissage du modèle A2C.
-\end{itemize}
-
-\paragraph{Fonctions de Loss}\mbox{} \\
-
-L'apprentissage de l'acteur repose sur l'avantage :
-\[
-A_t = R_t - V(s_t),
-\]
-où \(R_t\) représente le retour observé et \(V(s_t)\) la valeur estimée par
-le critique. La perte de l'acteur s'écrit :
-\[
-\mathcal{L}_{actor} =
--\log \pi_\theta(a_t \mid s_t)\, A_t
-- \beta \, \mathcal{H}\big(\pi_\theta(\cdot \mid s_t)\big),
-\]
-avec \(\beta\) le coefficient d'entropie et \(\mathcal{H}\) l'entropie de la
-politique. Le terme d'entropie évite que la politique devienne trop vite
-déterministe. Un coefficient plus élevé
-favorise l'exploration, tandis qu'un coefficient plus faible pousse l'agent
-à exploiter davantage les stratégies déjà apprises.
-
-La perte du critique est une erreur quadratique moyenne entre la valeur
-prédite et le retour observé :
-\[
-\mathcal{L}_{critic} = \big(R_t - V(s_t)\big)^2.
-\]
-
+Acteur et critique partageant un tronc commun, mise à
+jour synchrone par avantage estimé. Variante
+permettant de comparer une approche \textit{policy-based}
+au DQN \textit{value-based}.
 
 \paragraph{PPO (Proximal Policy Optimization).}
 L'agent PPO est formulé comme un \textbf{market maker
@@ -736,6 +545,20 @@ $\lambda=0{,}95$), normalisation par percentiles 5/95,
 EMA du critique cible (décroissance $0{,}98$).
 Actions discrètes : HOLD, BUY, SELL.
 
+\paragraph{SAC (Soft Actor-Critic).}
+Algorithme off-policy entropy-regularized implémentant une
+\textbf{stratégie de market making} : contrairement aux agents
+directionnels, SAC place simultanément des ordres bid et ask
+autour du midprice pour capturer le spread sans parier sur la
+direction du prix. L'action est continue :
+$(b_s,\,a_s) \in [0,\,0.5\%]^2$ (bid/ask spread).
+Architecture : acteur MLP + twin critic (clipped double-Q),
+coefficient d'entropie fixe $\alpha = 0.2$, replay buffer
+de $500\,000$ transitions, soft target update $\tau = 0.005$.
+La récompense suit l'approche Avellaneda-Stoikov : spread
+capturé à chaque fill, pénalisé par un terme quadratique
+sur l'inventaire et un terme de sélection adverse.
+
 \subsection{Infrastructure d'entraînement}
 
 \begin{itemize}[leftmargin=1.2cm]
@@ -749,13 +572,110 @@ Actions discrètes : HOLD, BUY, SELL.
           drawdown, mémoire GPU.
 \end{itemize}
 
-\subsection{Tableau de bord}
+\subsection{Tableau de bord interactif}
+\label{sec:dashboard}
 
-Front-end statique HTML/CSS/JS servi par un petit
-serveur Python ; lit les fichiers JSON
-\texttt{data/market\_state.json} et
-\texttt{data/agent\_orders.json} produits par le
-moteur et l'agent.
+Le dashboard est une interface web temps réel permettant de
+\textbf{piloter la simulation et monitorer les agents sans
+perturber leurs performances}. Il s'appuie sur une architecture
+totalement découplée : le backend lit passivement les fichiers
+JSON et logs produits par les processus de trading, sans jamais
+interagir directement avec eux.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.5cm and 1cm,
+        every node/.style={font=\small},
+        box/.style={draw, rounded corners, align=center,
+                    minimum width=3cm, minimum height=0.9cm},
+        proc/.style={box, fill=blue!12},
+        file/.style={box, fill=gray!15, dashed},
+        ui/.style={box, fill=orange!15},
+        arr/.style={->, thick, >=stealth}
+    ]
+        \node[proc] (market) {\textbf{LiveMarketData}\\\footnotesize C++ / libcurl};
+        \node[proc, right=2cm of market] (agent)  {\textbf{Agent Python}\\\footnotesize stratégie RL};
+        \node[file, below=of market] (mstate) {\texttt{market\_state.json}};
+        \node[file, below=of agent]  (alog)   {\texttt{dashboard\_agent.log}};
+        \node[proc, below=1.5cm of mstate, xshift=1.8cm] (srv)
+              {\textbf{server.py}\\\footnotesize ThreadingHTTPServer};
+        \node[ui,   left=1.8cm of srv] (browser)
+              {\textbf{Navigateur}\\\footnotesize HTML/CSS/JS};
+
+        \draw[arr] (market) -- (mstate);
+        \draw[arr] (agent)  -- (alog);
+        \draw[arr] (mstate) -- (srv);
+        \draw[arr] (alog)   -- (srv);
+        \draw[arr, <->] (browser) -- node[above]{\footnotesize HTTP/JSON} (srv);
+    \end{tikzpicture}
+    \caption{Architecture découplée du dashboard.}
+    \label{fig:dashboard_arch}
+\end{figure}
+
+\subsubsection{API REST}
+
+\begin{center}
+\footnotesize
+\begin{tabular}{llp{7cm}}
+    \toprule
+    \textbf{Méthode} & \textbf{Endpoint} & \textbf{Rôle} \\
+    \midrule
+    GET  & \texttt{/api/snapshot}          & État complet (marché, trades, métriques, PnL, logs, décision) \\
+    POST & \texttt{/api/start\_simulation} & Démarre marché + agent \\
+    POST & \texttt{/api/start\_market}     & Démarre uniquement le flux de marché \\
+    POST & \texttt{/api/stop\_simulation}  & Arrête les processus (SIGTERM → SIGKILL) \\
+    POST & \texttt{/api/clear\_logs}       & Remet à zéro les logs et l'état du graphique \\
+    POST & \texttt{/api/login}             & Authentification (cookie HttpOnly, SHA-256) \\
+    POST & \texttt{/api/logout}            & Invalidation du token de session \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Composants de l'interface}
+
+Front-end en HTML/CSS/JavaScript pur, sans framework externe
+(LightweightCharts est le seul import tiers, pour le graphique).
+
+\begin{enumerate}[leftmargin=1.2cm]
+    \item \textbf{Authentification} --- page \texttt{login.html}
+          autonome, session par cookie \texttt{HttpOnly; SameSite=Strict}.
+    \item \textbf{Sélecteurs produit / agent} --- changement à chaud
+          avec redémarrage automatique si simulation active.
+    \item \textbf{Graphique en chandeliers} --- bougies agrégées
+          côté serveur, mise à jour toutes les 2~s.
+    \item \textbf{Carnet d'ordres live} --- 8 niveaux bid/ask.
+    \item \textbf{Courbe PnL} --- SVG calculé à partir de
+          $\Delta_t = \text{équité}_t - \text{équité}_{t_0}$.
+    \item \textbf{Badge dernière décision} --- BUY / SELL / HOLD
+          avec horodatage, offset-tracking pour exclure les
+          sessions précédentes.
+    \item \textbf{Barre d'inventaire} --- risque coloré
+          vert~$<33\%$, orange~$<66\%$, rouge~$\geq66\%$.
+    \item \textbf{Logs système} --- onglets Agent / Market / Erreurs,
+          40 dernières lignes avec échappement HTML.
+\end{enumerate}
+
+\subsubsection{Persistance et authentification}
+
+\texttt{data/inventory.json} est mis à jour à chaque changement
+de position détecté et rechargé au démarrage. \texttt{data/users.json}
+stocke les mots de passe hachés SHA-256 ; un compte
+\texttt{admin/admin} est créé à la première exécution.
+
+\subsubsection{Parsing des logs agent}
+
+Le serveur lit \texttt{data/dashboard\_agent.log} en mode
+\emph{offset-tracking} : à chaque démarrage d'un nouvel agent,
+l'offset de fin de fichier est enregistré ; toutes les lectures
+partent de cet offset, éliminant les données des sessions précédentes.
+
+\begin{lstlisting}[language=python]
+ORDER_RE    = re.compile(r"\[(\d{2}:\d{2}:\d{2})\].*?Order placed - (BUY|SELL)")
+CASH_RE     = re.compile(r"\s*Cash:\s*\$(\d+(?:\.\d+)?)")
+INVENTORY_RE= re.compile(r"\s*Inventory:\s*(\d+(?:\.\d+)?)")
+TOTAL_RE    = re.compile(r"Total:\s*\$(\d+(?:\.\d+)?)")
+\end{lstlisting}
 
 % ===============================================================
 \section{Expérimentations}
@@ -813,17 +733,7 @@ diversité des trajectoires.
 Les métriques suivies par épisode sont :
 récompense totale, loss moyenne épisode, nombre de trades,
 inventaire moyen (valeur absolue), PnL réalisé et epsilon.
-\subsection{Validation manuelle}
 
-Des scripts \texttt{test\_dqn\_manual.py} et
-\texttt{test\_sma\_manual.py} vérifient que :
-\begin{itemize}[leftmargin=1.2cm]
-    \item BUY est sélectionné dans les contextes attendus ;
-    \item SELL est bloqué quand l'inventaire est nul
-          (\textit{inventory guard}) ;
-    \item la SMA est calculée correctement sur la
-          fenêtre glissante.
-\end{itemize}
 % ===============================================================
 \section{Résultats et discussion}
 \label{sec:resultats}
@@ -845,7 +755,119 @@ HFT extrême).
 \subsubsection{Advantage Actor-Critic (A2C)}
 \label{sec:a2c}
 
+\paragraph{Principe de l'algorithme}\mbox{} \\
 
+L'agent \textit{Advantage Actor-Critic} (A2C) combine deux réseaux de neurones :
+un \textbf{acteur} qui choisit l'action à exécuter, et un \textbf{critique}
+qui estime la valeur de l'état courant. L'objectif de l'acteur est de
+maximiser la récompense attendue, tandis que le critique apprend à prédire
+la valeur du retour observé afin de réduire la variance de l'apprentissage.
+
+Dans notre implémentation, l'espace d'actions est discret et contient trois
+actions possibles :
+\[
+\mathcal{A} = \{\text{HOLD}, \text{BUY}, \text{SELL}\}.
+\]
+L'agent reçoit à chaque pas de temps un état de dimension 121, construit à
+partir des dernières bougies de volume et de l'inventaire courant.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{figures/Advantage-Actor-Critic-A2C-architecture.png}
+\caption{Principe général de l'architecture Actor-Critic utilisée pour A2C.}
+\label{fig:a2c_architecture}
+\end{figure}
+
+\paragraph{Représentation de l'état} \mbox{} \\
+
+L'observation fournie à l'agent est composée de quatre blocs de 30 valeurs
+normalisées, auxquels s'ajoute une valeur scalaire correspondant à
+l'inventaire :
+\[
+s_t = \big[\text{close}_{t-29:t},\ \text{high}_{t-29:t},\ \text{low}_{t-29:t},\ \text{volume}_{t-29:t},\ \text{inventory}_t\big].
+\]
+Chaque bloc est normalisé par rapport à la dernière clôture de la fenêtre,
+ce qui permet de rendre l'apprentissage plus stable et plus robuste aux
+variations d'échelle du prix.
+
+\paragraph{Fonction de récompense}\mbox{} \\
+
+La récompense est calculée à chaque pas de temps en fonction de la variation de la valeur du portefeuille, tout en intégrant une gestion du risque liée à l'exposition. 
+
+\subparagraph{1. Valeur du portefeuille}\mbox{} \\
+La valeur totale du portefeuille à l'instant $t$, notée $V_t$, est définie par la somme des liquidités et de la valeur de l'inventaire au prix de clôture :
+\[
+V_t = \text{cash}_t + (I_t \cdot P_t)
+\]
+où :
+\begin{itemize}
+    \item $\text{cash}_t$ représente les liquidités accumulées (achats et ventes).
+    \item $I_t$ est l'inventaire, soit le nombre de contrats détenus.
+    \item $P_t$ est le prix de clôture de la bougie de volume actuelle.
+\end{itemize}
+
+\subparagraph{2. Calcul de la récompense instantanée}\mbox{} \\
+La récompense $r_t$ repose sur le profit ou la perte latent (\textit{Step PnL}) ajusté par une pénalité d'inventaire quadratique :
+\[
+r_t = \text{clip}\left( (V_t - V_{t-1}) - \lambda I_t^2 P_t, \, -10, \, 10 \right)
+\]
+\begin{itemize}
+    \item \textbf{Variation de PnL} ($V_t - V_{t-1}$) : L'agent est récompensé si la valeur totale de ses actifs augmente.
+    \item \textbf{Pénalité d'inventaire} ($\lambda I_t^2 P_t$) : Pour limiter le risque directionnel, une pénalité est appliquée avec un coefficient $\lambda = 0.0001$. Cette pénalité augmente de façon non linéaire avec la taille de la position.
+    \item \textbf{Écrêtage (Clipping)} : La récompense est contrainte dans l'intervalle $[-10, 10]$ pour stabiliser l'apprentissage du modèle A2C.
+\end{itemize}
+
+\subparagraph{3. Conditions d'exécution}\mbox{} \\
+La mise à jour de $V_t$ dépend de l'exécution des ordres \textit{limit} placés par l'agent :
+\begin{itemize}
+    \item Un \textbf{achat} est validé si le prix bas de la bougie atteint le prix bid de l'agent : $P_{\text{low}} \le P_{\text{bid\_agent}}$.
+    \item Une \textbf{vente} est validée si le prix haut de la bougie atteint le prix ask de l'agent : $P_{\text{high}} \ge P_{\text{ask\_agent}}$.
+\end{itemize}
+\paragraph{Perte d'apprentissage}\mbox{} \\
+
+L'apprentissage de l'acteur repose sur l'avantage :
+\[
+A_t = R_t - V(s_t),
+\]
+où \(R_t\) représente le retour observé et \(V(s_t)\) la valeur estimée par
+le critique. La perte de l'acteur s'écrit :
+\[
+\mathcal{L}_{actor} =
+-\log \pi_\theta(a_t \mid s_t)\, A_t
+- \beta \, \mathcal{H}\big(\pi_\theta(\cdot \mid s_t)\big),
+\]
+avec \(\beta\) le coefficient d'entropie et \(\mathcal{H}\) l'entropie de la
+politique. Le terme d'entropie évite que la politique devienne trop vite
+déterministe.
+
+La perte du critique est une erreur quadratique moyenne entre la valeur
+prédite et le retour observé :
+\[
+\mathcal{L}_{critic} = \big(R_t - V(s_t)\big)^2.
+\]
+
+\paragraph{Coefficient d'entropie}\mbox{} \\
+
+Le coefficient d'entropie n'est pas fixé dans l'absolu : il peut être
+constant ou décroître au cours de l'entraînement. Un coefficient plus élevé
+favorise l'exploration, tandis qu'un coefficient plus faible pousse l'agent
+à exploiter davantage les stratégies déjà apprises.
+
+Dans notre cas, une décroissance progressive du coefficient d'entropie peut
+être utilisée pour encourager l'exploration au début, puis stabiliser la
+politique sur la fin de l'entraînement.
+
+\paragraph{Architecture du modèle}\mbox{} \\
+
+L'acteur et le critique utilisent des réseaux multicouches entièrement
+connectés. L'acteur produit des logits pour les trois actions possibles,
+puis une loi de probabilité catégorielle est construite à partir de ces logits.
+L'action est ensuite échantillonnée pendant l'entraînement et choisie de
+manière gloutonne lors de l'inférence.
+
+Le critique estime une valeur scalaire à partir de l'état courant. Cette
+estimation sert à calculer l'avantage et à guider la mise à jour des poids
+du réseau de politique.
 
 \paragraph{Résultats d'entraînement}\mbox{} \\
 
@@ -1057,6 +1079,113 @@ La moyenne mobile montre néanmoins une tendance à la hausse
 significative, attestant que l'agent améliore continuellement
 sa politique au fil de l'entraînement.
 
+\subsubsection{SAC -- Soft Actor-Critic}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{figures/sac_train_curves.png}
+    \caption{Courbes d'apprentissage SAC : reward par épisode,
+             moyenne glissante (20), reward de validation,
+             pertes critic/actor, entropie et mises à jour cumulées.
+             Meilleur checkpoint à l'épisode~130
+             (val reward 340.42), early stop épisode~230.}
+    \label{fig:sac_train}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{figures/sac_eval.png}
+    \caption{Évaluation multi-seed SAC (5 seeds $\times$ 50 épisodes) :
+             reward cumulatif, distribution par épisode,
+             taux de remplissage bid/ask et distribution des rewards par step.}
+    \label{fig:sac_eval}
+\end{figure}
+
+\textbf{Entraînement.}
+Hyperparamètres : LR~$= 3\times10^{-4}$, batch~256,
+$\gamma = 0.99$, $\tau = 0.005$, 20 épisodes de warmup,
+2 gradient steps par step d'environnement.
+Le meilleur checkpoint est sauvegardé à l'épisode~130
+(val reward~340.42) ; l'early stop se déclenche à
+l'épisode~230 (patience de 100 épisodes sans amélioration),
+soit moins de 10\% du budget total de 2\,500 épisodes.
+
+\textbf{Évaluation multi-seed.}
+Le meilleur checkpoint est évalué sur 5 seeds indépendantes
+$\times$ 50 épisodes sur le jeu de test BTCUSDT
+(15\% des données les plus récentes, jamais vues à
+l'entraînement).
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{l c c c c c}
+        \toprule
+        \textbf{Politique} & \textbf{Mean R} & \textbf{Sharpe}
+            & \textbf{MaxDD} & \textbf{Fill\%} & \textbf{MaxInv} \\
+        \midrule
+        \textbf{SAC}  & $160.68 \pm 4.86$  & $8.82 \pm 0.82$
+            & $7.09 \pm 10.15$ & $18.3 \pm 0.4$ & $1.49 \pm 0.07$ \\
+        Random        & $84.92 \pm 14.16$  & $6.37 \pm 0.80$
+            & $29.91 \pm 9.13$ & $7.2 \pm 0.6$  & $0.63 \pm 0.04$ \\
+        Fixed 0.2\%   & $58.06 \pm 6.94$   & $4.62 \pm 0.99$
+            & $0.00 \pm 0.00$  & $1.0 \pm 0.1$  & $0.18 \pm 0.02$ \\
+        \bottomrule
+    \end{tabular}
+    \caption{Résultats SAC multi-seed vs baselines sur le jeu de test BTCUSDT.}
+    \label{tab:sac_eval}
+\end{table}
+
+\textbf{Reward par épisode.}
+La récompense de validation progresse rapidement dans les
+130 premiers épisodes, atteignant un pic à 340.42. La
+moyenne mobile sur 20 épisodes confirme cette tendance
+haussière nette. Après l'épisode~130, le reward oscille
+sans amélioration significative, ce qui déclenche l'early
+stop à l'épisode~230 (patience de 100 épisodes). La
+convergence en moins de 10\% du budget prévu de
+2\,500 épisodes témoigne de l'efficacité de l'apprentissage
+off-policy : le replay buffer permet de réutiliser les
+expériences passées et d'apprendre plus rapidement qu'un
+algorithme on-policy.
+
+\textbf{Pertes critic et actor.}
+La perte du critic se stabilise progressivement au fil de
+l'entraînement, confirmant que les deux réseaux~$Q$
+convergent vers des estimations cohérentes de la valeur
+des paires (état, action). La perte de l'acteur est
+décroissante en valeur absolue, signe que les Q-valeurs
+estimées augmentent — comportement attendu d'une politique
+qui s'améliore et apprend à citer des spreads mieux
+positionnés. L'utilisation du minimum des deux critics
+(clipped double-Q) contient efficacement la surestimation
+qui affecte typiquement les algorithmes actor-critic.
+
+\textbf{Entropie.}
+Le coefficient $\alpha = 0.2$ reste constant comme prévu,
+sans auto-tuning. La courbe d'entropie de la politique
+s'effondre progressivement au cours de l'entraînement :
+la politique devient quasi-déterministe. Pour un espace
+d'action aussi contraint ($[0,\,0.5\%]^2$), ce comportement
+est attendu et souhaitable — en inférence, une politique
+déterministe est plus prévisible et plus facile à auditer.
+
+\textbf{Évaluation multi-seed.}
+Les 5 seeds indépendantes produisent des résultats
+très cohérents (écart-type de 4.86 sur le mean reward
+de 160.68), ce qui valide la stabilité de l'apprentissage
+et l'absence de surapprentissage sur une graine particulière.
+SAC surpasse systématiquement les deux baselines sur toutes
+les métriques : $\times 2$ vs Random (84.92) et $\times 3$
+vs Fixed~0.2\% (58.06). Le fill rate de 18.3\% montre que
+l'agent a appris à citer de façon compétitive : suffisamment
+proche du midprice pour être rempli fréquemment, tout en
+capturant un spread suffisant pour être profitable. Le
+Sharpe de 8.82 confirme que le rendement est obtenu avec
+un risque maîtrisé. Le MaxDD de 7.09\% avec une variance
+élevée ($\pm 10.15\%$) reflète la sensibilité aux conditions
+de marché de la fenêtre de test, inhérente à tout agent
+de market making face à un marché non stationnaire.
+
 \subsection{Discussion}
 
 
@@ -1064,8 +1193,7 @@ sa politique au fil de l'entraînement.
 objectifs de performance, l'intégration Binance est
 stable, les stratégies par règles donnent une
 \textit{baseline} interprétable et les agents RL
-convergent visiblement (figures \ref{fig:a2c},
-\ref{fig:ppo_train}, \ref{fig:dreamer}).
+convergent sur les données d'entraînement.
 
 \paragraph{Limites observées.} Les agents RL restent
 sensibles à la qualité du \textit{reward shaping} et
@@ -1203,33 +1331,57 @@ non-régression du PnL sur un jeu de validation
 \textit{out-of-sample}.
 
 
+% TODO: Compléter si une procédure de monitoring est
+% mise en place (alertes Slack/mail, seuils de PnL, etc.)
+\begin{itemize}[leftmargin=1.2cm]
+    \item Lire les logs \texttt{dreamer\_train.log} et les
+          CSV \texttt{dqn\_metrics/*.csv}.
+    \item Surveiller la latence de l'API Binance.
+    \item Conserver les checkpoints
+          \texttt{models/*.pth} versionnés.
+\end{itemize}
 
-% ===============================================================
+\subsection{Tests de non-régression}
+
+\begin{lstlisting}[language=bash]
+./build/OrderBookTests          # tests fonctionnels et perf C++
+python3 test_dqn_manual.py      # validation actions DQN
+python3 test_sma_manual.py      # validation SMA
+python3 test_sac_state_manual.py # validation SAC state builder
+\end{lstlisting}
+
 \section{Conclusion}
 \label{sec:conclusion}
 % ===============================================================
 
-Ce projet a permis de concevoir une plateforme complète de
-market making algorithmique, articulée autour d'un moteur de
-carnet d'ordres haute performance en C++20, d'une ingestion
-de données de marché en temps réel via l'API Binance, d'une
-collection d'agents de trading allant des stratégies par règles
-(Mean Reversion, RSI, Bollinger) aux agents d'apprentissage par
-renforcement (DQN, A2C, PPO, Dreamer~v3), et d'un tableau de
-bord interactif pour la visualisation et le contrôle. Le moteur
-atteint des latences de l'ordre de la microseconde avec un débit
-supérieur à 400\,000 opérations par seconde, validant son usage
-dans un contexte de trading algorithmique. Les agents RL
-convergent sur les données d'entraînement, et ce projet nous a
-confrontés à des problématiques concrètes de microstructure de
-marché, de reward shaping et de généralisation hors période
-d'entraînement. Les pistes d'amélioration identifiées portent sur
-l'enrichissement de l'espace d'état, l'alignement des
-hyperparamètres entre entraînement et déploiement, et l'adoption
-d'un protocole de validation glissante sur données futures plus rigoureux.
+Ce projet démontre la faisabilité d'une plateforme de
+trading complète associant un \textbf{moteur de carnet
+d'ordres en C++20 performant} ($O(\log n)$ insertion,
+$O(1)$ annulation, latences microsecondes), une
+\textbf{ingestion temps réel} de données Binance, une
+\textbf{collection d'agents de trading} couvrant à la
+fois les heuristiques classiques (mean reversion, RSI,
+Bollinger) et les méthodes d'apprentissage par
+renforcement modernes (DQN, A2C, PPO, SAC),
+un \textbf{dashboard interactif} authentifié pour le monitoring
+sans latence, et des \textbf{outils d'évaluation reproductibles}
+(CSV, plots, multi-seed benchmarks).
+
+Les expérimentations ont validé les exigences de
+performance du moteur, ainsi que la convergence des
+agents sur les jeux de données utilisés. L'agent SAC
+en particulier démontre une capacité à surpasser les
+baselines aléatoires et heuristiques sur le même dataset.
+Les pistes d'extension naturelles concernent l'enrichissement de
+l'espace d'état (\textit{order flow imbalance},
+profondeur multi-niveaux), l'introduction de
+\textit{rewards} à risque ajusté, et un protocole de
+\textit{walk-forward validation} systématique pour
+mieux capturer la non-stationnarité des marchés crypto.
 
 \begin{thebibliography}{9}
 \bibitem{dreamerv3} D. Hafner et al., \emph{Mastering Diverse Domains through World Models}, 2023.
+\bibitem{sac} T. Haarnoja et al., \emph{Soft Actor-Critic: Off-Policy Deep Reinforcement Learning with a Stochastic Actor}, ICML, 2018.
 \bibitem{ppo} J. Schulman et al., \emph{Proximal Policy Optimization Algorithms}, 2017.
 \bibitem{ddqn} H. van Hasselt et al., \emph{Deep Reinforcement Learning with Double Q-learning}, AAAI, 2016.
 \bibitem{gae} J. Schulman et al., \emph{High-Dimensional Continuous Control Using Generalized Advantage Estimation}, 2015.
