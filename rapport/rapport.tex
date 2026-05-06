@@ -364,25 +364,72 @@ de matching} existant et d'éviter une branche dédiée.
 
 \subsection{Données de marché temps réel}
 
-L'exécutable \texttt{LiveMarketData} interroge l'API
-publique Binance via \texttt{libcurl}, parse la réponse
-JSON avec \texttt{nlohmann/json}, puis injecte le carnet
-dans le moteur. Un \texttt{Display} ANSI affiche en
-continu le \textit{top of book}, la SMA et les ordres
-agents.
+L'exécutable \texttt{LiveMarketData} assure l'ingestion du flux de
+marché en temps réel et la normalisation des données pour les
+agents. Concrètement :
+
+\begin{itemize}[leftmargin=1.2cm]
+    \item \textbf{Source} : interroge l'API publique (endpoints REST/WS)
+          de la bourse (Binance) via \texttt{libcurl} et reçoit des
+          réponses JSON.
+    \item \textbf{Parsing} : le JSON est parsé avec
+          \texttt{nlohmann/json} et converti en structure interne
+          (best bid / best ask, book depth, ticks, timestamps).
+    \item \textbf{Sortie} : le flux normalisé est injecté dans le
+          moteur (OrderBook) et sérialisé en fichiers JSON
+          (\texttt{data/market\_state.json}) pour le dashboard et les
+          agents.
+\end{itemize}
+
+Un \texttt{Display} ANSI optionnel affiche en continu le \textit{top of
+book}, le midprice, la SMA et les ordres des agents pour faciliter le
+debug et la surveillance en local.
 
 \subsection{Agents de trading}
 
 \subsubsection{Stratégies par règles}
 
+Chaque stratégie repose sur le calcul d'un ensemble d'indicateurs,
+puis la comparaison à des seuils pour décider BUY, SELL ou HOLD.
+On note :
 \begin{itemize}[leftmargin=1.2cm]
-    \item \textbf{Mean Reversion} : achète quand le prix est
-          $-2\,\%$ sous la SMA, vend si $+2\,\%$ au-dessus.
-    \item \textbf{RSI} : RSI sur 14 périodes, achat si
-          $<30$, vente si $>70$.
-    \item \textbf{Bollinger Bands} : achat/vente quand
-          le prix sort des bandes à $\pm 2\sigma$.
+    \item $P_t$ : \textbf{prix midprice} à l'instant $t$, défini comme
+          $P_t = \frac{\text{bestask} + \text{bestbid}}{2}$ ;
+    \item $n$ : fenêtre d'analyse (typiquement $n=20$ périodes) ;
 \end{itemize}
+
+\paragraph{Mean Reversion.}
+
+\textit{Calcul.} Moyenne mobile simple et écart relatif :
+$$\mathrm{SMA}_n(t)=\frac{1}{n}\sum_{i=0}^{n-1}P_{t-i}, \quad
+\Delta_t=\frac{P_t-\mathrm{SMA}_n(t)}{\mathrm{SMA}_n(t)}$$
+
+\textit{Décision.} Seuils à $\pm 2\%$ :
+$$\Delta_t < -0{,}02 \Rightarrow \mathrm{BUY}, \quad
+\Delta_t > 0{,}02 \Rightarrow \mathrm{SELL}, \quad
+\text{sinon HOLD}$$
+
+\paragraph{RSI (Relative Strength Index).}
+
+\textit{Calcul.} Sur 14 périodes, rapport des gains et pertes moyens :
+$$\mathrm{RSI}=100-\frac{100}{1+RS}, \quad
+RS=\frac{\text{gain moyen (14 périodes)}}{\text{perte moyenne (14 périodes)}}$$
+
+\textit{Décision.} Zones de survente/surachat :
+$$\mathrm{RSI} < 30 \Rightarrow \mathrm{BUY}, \quad
+\mathrm{RSI} > 70 \Rightarrow \mathrm{SELL}, \quad
+\text{sinon HOLD}$$
+
+\paragraph{Bollinger Bands.}
+
+\textit{Calcul.} Moyenne mobile centrale et bandes de volatilité ($2\sigma$) :
+$$\mathrm{SMA}_n(t), \quad \text{bornes} = \mathrm{SMA}_n(t) \pm 2\sigma_t$$
+où $\sigma_t$ est l'écart type empirique sur la fenêtre.
+
+\textit{Décision.} Dépassement des bornes :
+$$P_t < \mathrm{SMA}_n(t)-2\sigma_t \Rightarrow \mathrm{BUY}, \quad
+P_t > \mathrm{SMA}_n(t)+2\sigma_t \Rightarrow \mathrm{SELL}, \quad
+\text{sinon HOLD}$$
 
 \subsubsection{Apprentissage par renforcement}
 
