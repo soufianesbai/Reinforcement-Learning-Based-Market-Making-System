@@ -306,7 +306,9 @@ body {
   flex-direction: column;
   gap: 10px;
   max-height: calc(100vh - 104px);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 .trade-log-wrap {
@@ -616,6 +618,50 @@ select {
   color: #d9ebff;
   border-color: rgba(74, 163, 255, 0.55);
   background: rgba(74, 163, 255, 0.15);
+}
+
+.system-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.system-logs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.system-log-view {
+  min-height: 132px;
+  max-height: 210px;
+  overflow-y: auto;
+  border: 1px solid rgba(159, 179, 209, 0.16);
+  border-radius: 10px;
+  background: rgba(10, 23, 43, 0.72);
+  padding: 10px;
+  font-family: 'JetBrains Mono', 'Fira Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.system-log-line {
+  padding: 3px 0;
+  color: #d5e4fb;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.system-log-line.error {
+  color: #ff9da1;
+}
+
+.system-log-empty {
+  color: var(--text-sub);
+  font-size: 0.78rem;
+  font-style: italic;
 }
 
 

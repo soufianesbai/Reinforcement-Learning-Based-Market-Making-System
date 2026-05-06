@@ -222,6 +222,17 @@ window.MarketMindComponents = (function () {
             <tbody id="trade-log-body"></tbody>
           </table>
         </div>
+        <div class="system-logs">
+          <div class="system-logs-header">
+            <h3 class="sub-title">System Logs</h3>
+            <div class="log-tabs" id="system-log-tabs">
+              <button class="log-tab active" data-log-tab="agent">Agent</button>
+              <button class="log-tab" data-log-tab="market">Market</button>
+              <button class="log-tab" data-log-tab="error">Errors</button>
+            </div>
+          </div>
+          <div id="system-log-view" class="system-log-view"></div>
+        </div>
 
       </section>
     `;

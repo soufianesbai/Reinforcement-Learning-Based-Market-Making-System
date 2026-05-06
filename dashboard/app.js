@@ -6,8 +6,10 @@
   let tvChart = null;
   let tvSeries = null;
   let isSwitchingSymbol = false;
+  let activeLogTab = "agent";
   let lastMetrics = { cash: null, inventory: null, trade_count: 0, inventory_per_product: {} };
   let lastHistory = { trades: 0, buys: 0, sells: 0, net: 0, sell_ratio: 0 };
+  let lastSystemLogs = { agent: [], market: [], error: [] };
 
   function renderLayout() {
     const app = document.getElementById("app");
@@ -185,6 +187,50 @@
           <td class="${row.result >= 0 ? "pos" : "neg"}">${row.result >= 0 ? "+" : "-"}$${Math.abs(row.result).toFixed(2)}</td>
         </tr>
       `)
+      .join("");
+  }
+
+  function escapeHtml(text) {
+    return String(text)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function renderSystemLogs() {
+    const view = document.getElementById("system-log-view");
+    const tabs = document.querySelectorAll("#system-log-tabs .log-tab");
+    if (!view) return;
+
+    tabs.forEach((tab) => {
+      tab.classList.toggle("active", tab.getAttribute("data-log-tab") === activeLogTab);
+    });
+
+    const errorLines = [];
+    if (Array.isArray(lastSystemLogs.error)) errorLines.push(...lastSystemLogs.error);
+    if (Array.isArray(lastSystemLogs.errors)) errorLines.push(...lastSystemLogs.errors);
+
+    const sources = {
+      agent: Array.isArray(lastSystemLogs.agent) ? lastSystemLogs.agent : [],
+      market: Array.isArray(lastSystemLogs.market) ? lastSystemLogs.market : [],
+      error: errorLines,
+    };
+
+    const lines = sources[activeLogTab] || [];
+    if (!lines.length) {
+      const emptyLabel = activeLogTab === "error" ? "No errors recorded." : "No log lines available.";
+      view.innerHTML = `<div class="system-log-empty">${emptyLabel}</div>`;
+      return;
+    }
+
+    view.innerHTML = lines
+      .slice(-40)
+      .map((line) => {
+        const cls = activeLogTab === "error" ? "system-log-line error" : "system-log-line";
+        return `<div class="${cls}">${escapeHtml(line)}</div>`;
+      })
       .join("");
   }
 
@@ -383,6 +429,16 @@
       .join("");
   }
 
+  function bindSystemLogTabs() {
+    const tabs = document.querySelectorAll("#system-log-tabs .log-tab");
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        activeLogTab = tab.getAttribute("data-log-tab") || "agent";
+        renderSystemLogs();
+      });
+    });
+  }
+
   function applyMarketState(payload) {
     if (!payload || !payload.ok) {
       state.orderBook.ask = null;
@@ -432,6 +488,13 @@
       const snap = await res.json();
 
       const { market, trades, status, metrics, chart, history, performance, last_decision, username } = snap;
+      const rawLogs = snap.logs || {};
+
+      lastSystemLogs = {
+        agent: Array.isArray(rawLogs.agent) ? rawLogs.agent : [],
+        market: Array.isArray(rawLogs.market) ? rawLogs.market : [],
+        error: status?.last_error ? [status.last_error] : [],
+      };
 
       if (username) {
         const el = document.getElementById("topbar-username");
@@ -454,6 +517,7 @@
       renderPnlStats(history);
       renderInventoryBar(metrics?.inventory);
       renderLastDecision(last_decision);
+      renderSystemLogs();
 
       state.tradeLog = Array.isArray(trades) ? trades : [];
       renderTradeLog();
@@ -734,6 +798,7 @@
     renderTradeLog();
     bindControls();
     bindSidebar();
+    bindSystemLogTabs();
     renderDetailPanel();
 
     const logoutBtn = document.getElementById("logout-btn");
