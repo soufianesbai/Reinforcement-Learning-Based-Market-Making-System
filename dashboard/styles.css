@@ -437,6 +437,34 @@ select {
   color: #d9ebff;
 }
 
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 8px;
+}
+.topbar-username {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-sub);
+}
+.logout-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(159, 179, 209, 0.25);
+  background: rgba(159, 179, 209, 0.07);
+  color: var(--text-sub);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.logout-btn:hover {
+  background: rgba(248, 81, 73, 0.15);
+  border-color: rgba(248, 81, 73, 0.4);
+  color: #f85149;
+}
+
 .spread-badge {
   display: block;
   text-align: center;
@@ -590,6 +618,113 @@ select {
   background: rgba(74, 163, 255, 0.15);
 }
 
+
+/* ── PnL Card ─────────────────────────────────────────────────── */
+.pnl-card { margin-top: 0; }
+.pnl-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.pnl-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.pnl-value.pos { color: var(--green); }
+.pnl-value.neg { color: var(--red); }
+.pnl-chart-area {
+  width: 100%;
+  height: 80px;
+  margin-bottom: 12px;
+}
+.pnl-chart-area svg { display: block; }
+.pnl-empty {
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-sub);
+  font-size: 0.82rem;
+}
+.pnl-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.pnl-stat { text-align: center; }
+.pnl-stat-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-sub);
+  margin-bottom: 2px;
+}
+.pnl-stat-val {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* ── Agent status section ────────────────────────────────────── */
+.agent-status-section {
+  background: rgba(15, 27, 45, 0.5);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.last-decision-row, .inv-risk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+.decision-label, .inv-risk-label {
+  color: var(--text-sub);
+  min-width: 90px;
+  flex-shrink: 0;
+}
+.decision-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+}
+.decision-badge.buy  { background: rgba(46,204,113,0.15); color: var(--green); }
+.decision-badge.sell { background: rgba(231,76,60,0.15);  color: var(--red); }
+.decision-badge.hold { background: rgba(159,179,209,0.12); color: var(--text-sub); }
+.decision-time {
+  color: var(--text-sub);
+  font-size: 0.72rem;
+  margin-left: auto;
+}
+.inv-risk-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: rgba(159,179,209,0.12);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.inv-risk-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease, background 0.4s ease;
+}
+.inv-risk-bar.safe   { background: var(--green); }
+.inv-risk-bar.warn   { background: #f39c12; }
+.inv-risk-bar.danger { background: var(--red); }
+.inv-risk-pct {
+  color: var(--text-sub);
+  min-width: 32px;
+  text-align: right;
+  font-size: 0.78rem;
+}
 
 @media (max-width: 1180px) {
   .dashboard-grid {

@@ -1,26 +1,34 @@
 import numpy as np
+import torch
+import torch.nn as nn
+from pathlib import Path
 from typing import Dict, Any, Optional
-
-try:
-    import torch
-    _TORCH_AVAILABLE = True
-except ImportError:
-    _TORCH_AVAILABLE = False
 
 from ..interfaces import BaseStrategy, StrategySignal
 from ..types import Side
 
-try:
-    from ..ppo.train_ppo import PolicyNetwork
-except ImportError:
-    PolicyNetwork = None
+ROOT = Path(__file__).resolve().parent.parent.parent
+DEFAULT_MODEL_PATH = str(ROOT / "agents" / "ppo" / "models_checkpoints" / "ppo_policy_FINAL.pth")
+
+
+class _PolicyNetwork(nn.Module):
+    def __init__(self, input_dim: int):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, 64), nn.ReLU(),
+            nn.Linear(64, 64),        nn.ReLU(),
+            nn.Linear(64, 2),         nn.Tanh(),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
 
 
 class PPOStrategy(BaseStrategy):
     def __init__(
         self,
         symbol: str = "SOLUSDT",
-        policy_model_path: str = "agents/ppo/models_checkpoints/ppo_policy_FINAL.pth",
+        policy_model_path: str = DEFAULT_MODEL_PATH,
         quantity_per_trade: float = 5.0,
         window_size: int = 30,
     ):
@@ -41,18 +49,14 @@ class PPOStrategy(BaseStrategy):
         self.model_loaded   = False
         self.policy_network = None
 
-        if not _TORCH_AVAILABLE or PolicyNetwork is None:
-            print("PPO: PyTorch not installed. Running in HOLD mode.")
-            return
-
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
         input_dim   = window_size * 4 + 1
 
         print(f"Loading PPO Policy Model from {policy_model_path}...")
         try:
-            self.policy_network = PolicyNetwork(input_dim).to(self.device)
+            self.policy_network = _PolicyNetwork(input_dim).to(self.device)
             self.policy_network.load_state_dict(
-                torch.load(policy_model_path, map_location=self.device)
+                torch.load(policy_model_path, map_location=self.device, weights_only=True)
             )
             self.policy_network.eval()
             self.model_loaded = True
@@ -120,7 +124,7 @@ class PPOStrategy(BaseStrategy):
                     side=Side.BUY,
                     price=agent_bid_price,
                     quantity=self.quantity,
-                    reason=f"AI MM Bid (dist: {bid_distance_pct*100:.3f}%)",
+                    reason=f"PPO MM Bid (dist: {bid_distance_pct*100:.3f}%)",
                     metadata={"ai_action_raw": action_bid, "inventory": self.inventory},
                 )
             return StrategySignal(side=None, price=0.0, quantity=0.0, reason="Inventory Full (Hold)")
@@ -131,27 +135,14 @@ class PPOStrategy(BaseStrategy):
                     side=Side.SELL,
                     price=agent_ask_price,
                     quantity=self.quantity,
-                    reason=f"AI MM Ask (dist: {ask_distance_pct*100:.3f}%)",
+                    reason=f"PPO MM Ask (dist: {ask_distance_pct*100:.3f}%)",
                     metadata={"ai_action_raw": action_ask, "inventory": self.inventory},
                 )
             return StrategySignal(side=None, price=0.0, quantity=0.0, reason="Inventory Empty (Hold)")
 
-    def analyze(self, state_dict: Dict) -> Dict:
-        self.update_data(state_dict)
-        signal = self.compute_signal()
-        price_cents = int(round(signal.price * 100)) if signal.price else 0
-        return {
-            "action":   signal.side.value if signal.side else None,
-            "side":     signal.side,
-            "price":    price_cents,
-            "quantity": signal.quantity,
-            "reason":   signal.reason,
-        }
-
     def get_status(self) -> Dict[str, Any]:
         return {
             "name":              "PPO Market Maker Strategy",
-            "torch_available":   _TORCH_AVAILABLE,
             "model_loaded":      self.model_loaded,
             "current_inventory": self.inventory,
             "max_inventory":     self.max_inventory,

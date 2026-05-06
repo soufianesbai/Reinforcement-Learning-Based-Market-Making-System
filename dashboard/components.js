@@ -16,7 +16,7 @@ window.MarketMindComponents = (function () {
       .join("");
   }
 
-  function topbar() {
+  function topbar(username) {
     return `
       <header class="topbar">
         <div class="brand">
@@ -35,6 +35,10 @@ window.MarketMindComponents = (function () {
           <div class="topbar-price-badge">
             <span class="topbar-price-label">MID</span>
             <span class="topbar-price-value" id="topbar-price">--</span>
+          </div>
+          <div class="topbar-user">
+            <span class="topbar-username" id="topbar-username">${username || ''}</span>
+            <button class="logout-btn" id="logout-btn" title="Sign out">↩ Logout</button>
           </div>
         </div>
       </header>
@@ -131,6 +135,24 @@ window.MarketMindComponents = (function () {
     `;
   }
 
+  function pnlCard() {
+    return `
+      <section class="card pnl-card">
+        <div class="pnl-header">
+          <h2>P&amp;L Session</h2>
+          <span class="pnl-value" id="pnl-value">+$0.00</span>
+        </div>
+        <div id="pnl-chart" class="pnl-chart-area"></div>
+        <div class="pnl-stats">
+          <div class="pnl-stat"><span class="pnl-stat-label">Win Rate</span><span class="pnl-stat-val" id="stat-winrate">--</span></div>
+          <div class="pnl-stat"><span class="pnl-stat-label">Avg Profit</span><span class="pnl-stat-val pos" id="stat-avgprofit">--</span></div>
+          <div class="pnl-stat"><span class="pnl-stat-label">Avg Loss</span><span class="pnl-stat-val neg" id="stat-avgloss">--</span></div>
+          <div class="pnl-stat"><span class="pnl-stat-label">Trades</span><span class="pnl-stat-val" id="stat-trades">--</span></div>
+        </div>
+      </section>
+    `;
+  }
+
   function rightPanel(products, agents) {
     return `
       <section class="card right-panel">
@@ -151,7 +173,7 @@ window.MarketMindComponents = (function () {
           <select id="agent-select">
             ${agents.map((a) => {
               const selected = a === "Mean Reversion" ? "selected" : "";
-              if (a === "DQN") return `<option disabled title="Modèle non trouvé — placer models/dqn_agent.pth">DQN (modèle manquant)</option>`;
+              if (a === "DQN") return `<option ${selected}>DQN</option>`;
               if (a === "PPO") return `<option ${selected}>PPO</option>`;
               return `<option ${selected}>${a}</option>`;
             }).join("")}
@@ -164,6 +186,21 @@ window.MarketMindComponents = (function () {
 
   <p class="helper-text" id="live-info">Ready.</p>
   <p class="helper-text error" id="live-error"></p>
+
+        <div class="agent-status-section">
+          <div class="last-decision-row">
+            <span class="decision-label">Last decision</span>
+            <span class="decision-badge hold" id="decision-badge">—</span>
+            <span class="decision-time" id="decision-time"></span>
+          </div>
+          <div class="inv-risk-row">
+            <span class="inv-risk-label">Inventory risk</span>
+            <div class="inv-risk-bar-wrap">
+              <div class="inv-risk-bar safe" id="inv-risk-bar" style="width:0%"></div>
+            </div>
+            <span class="inv-risk-pct" id="inv-risk-pct">0%</span>
+          </div>
+        </div>
 
         <div class="detail-panel">
           <h3 class="sub-title" id="detail-title">Inventory Details</h3>
@@ -196,6 +233,7 @@ window.MarketMindComponents = (function () {
     portfolioCard,
     orderBookCard,
     chartCard,
+    pnlCard,
     rightPanel,
   };
 })();

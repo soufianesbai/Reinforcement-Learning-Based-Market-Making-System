@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import os
 import re
+import secrets
 import signal
 import subprocess
 import threading
@@ -17,6 +19,8 @@ DATA_DIR = ROOT_DIR / "data"
 MARKET_STATE_FILE = DATA_DIR / "market_state.json"
 MARKET_LOG_FILE = DATA_DIR / "dashboard_market.log"
 AGENT_LOG_FILE = DATA_DIR / "dashboard_agent.log"
+USERS_FILE = DATA_DIR / "users.json"
+INVENTORY_FILE = DATA_DIR / "inventory.json"
 
 ANSI_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 ORDER_RE = re.compile(r"\[(\d{2}:\d{2}:\d{2})\].*?Order placed - (BUY|SELL)")
@@ -56,9 +60,61 @@ chart_state = {
 # Inventory tracked per product across session switches
 inventory_per_product: dict = {}
 
+# Auth state
+_users: dict = {}
+sessions: dict = {}  # token → username
+
 
 def strip_ansi(line: str) -> str:
     return ANSI_RE.sub("", line)
+
+
+def hash_password(pw: str) -> str:
+    return hashlib.sha256(pw.encode("utf-8")).hexdigest()
+
+
+def load_users() -> None:
+    global _users
+    if USERS_FILE.exists():
+        try:
+            with USERS_FILE.open("r") as f:
+                _users = json.load(f)
+            print(f"[Auth] Loaded {len(_users)} user(s) from {USERS_FILE.name}")
+            return
+        except Exception:
+            pass
+    _users = {"admin": hash_password("admin")}
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    USERS_FILE.write_text(json.dumps(_users, indent=2), encoding="utf-8")
+    print("[Auth] Default user created → admin / admin")
+
+
+def check_session(handler) -> str | None:
+    cookie = handler.headers.get("Cookie", "")
+    for part in cookie.split(";"):
+        part = part.strip()
+        if part.startswith("session="):
+            return sessions.get(part[8:])
+    return None
+
+
+def load_inventory() -> None:
+    global inventory_per_product
+    if INVENTORY_FILE.exists():
+        try:
+            with INVENTORY_FILE.open("r") as f:
+                inventory_per_product = json.load(f)
+            print(f"[Inventory] Restored {len(inventory_per_product)} product(s) from disk")
+        except Exception:
+            pass
+
+
+def save_inventory() -> None:
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        INVENTORY_FILE.write_text(json.dumps(inventory_per_product, indent=2), encoding="utf-8")
+    except Exception:
+        pass
 
 
 def strategy_from_agent(agent_name: str) -> str:
@@ -344,6 +400,22 @@ def read_performance(limit: int = 30):
     return {"series": series, "ticks": ticks}
 
 
+def read_last_decision():
+    if not AGENT_LOG_FILE.exists():
+        return {"action": "—", "time": "—"}
+    offset = process_state.get("agent_log_offset", 0)
+    with AGENT_LOG_FILE.open("rb") as f:
+        full = f.read()
+    tail = full[offset:][-4096:].decode("utf-8", errors="ignore")
+    last_action, last_time = None, None
+    for line in tail.splitlines():
+        m = ORDER_RE.search(strip_ansi(line))
+        if m:
+            last_time = m.group(1)
+            last_action = m.group(2)
+    return {"action": last_action or "HOLD", "time": last_time or "—"}
+
+
 def read_snapshot():
     """Single endpoint returning all dashboard data — replaces 8 parallel requests."""
     if _reset_in_progress:
@@ -374,12 +446,17 @@ def read_snapshot():
     buys = len([r for r in all_trades if r["action"] == "Buy"])
     sells = len([r for r in all_trades if r["action"] == "Sell"])
     total = len(all_trades)
+    profitable = [r for r in all_trades if r["result"] > 0]
+    lossy = [r for r in all_trades if r["result"] < 0]
     history = {
         "trades": total,
         "buys": buys,
         "sells": sells,
         "net": round(sum(r["result"] for r in all_trades), 2),
         "sell_ratio": round((sells / total) * 100, 2) if total else 0.0,
+        "win_rate": round(len(profitable) / total * 100, 1) if total else 0.0,
+        "avg_profit": round(sum(r["result"] for r in profitable) / len(profitable), 2) if profitable else 0.0,
+        "avg_loss": round(sum(r["result"] for r in lossy) / len(lossy), 2) if lossy else 0.0,
     }
 
     with state_lock:
@@ -426,6 +503,7 @@ def read_snapshot():
         "logs": {"agent": tail_file(AGENT_LOG_FILE, 60), "market": tail_file(MARKET_LOG_FILE, 60)},
         "chart": chart,
         "history": history,
+        "last_decision": read_last_decision(),
     }
 
 
@@ -461,6 +539,7 @@ def read_runtime_metrics():
     current_product = process_state["product"]
     if latest_inventory is not None:
         inventory_per_product[current_product] = latest_inventory
+        save_inventory()
 
     return {
         "cash": latest_cash,
@@ -560,9 +639,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def _do_GET_inner(self):
         parsed = urlparse(self.path)
         path = parsed.path
+
+        # Public paths — no auth required
+        _PUBLIC = {"/login", "/login.html"}
+        if path not in _PUBLIC:
+            if check_session(self) is None:
+                self.send_response(302)
+                self.send_header("Location", "/login")
+                self.end_headers()
+                return
+
+        if path in ("/login", "/login.html"):
+            self._serve_file("login.html")
+            return
+
         # Endpoint pour vérifier si le reset est en cours
         if path == "/api/snapshot":
-            self._send_json(read_snapshot())
+            snap = read_snapshot()
+            snap["username"] = check_session(self) or "anonymous"
+            self._send_json(snap)
             return
 
         if path == "/api/reset_status":
@@ -647,6 +742,43 @@ class DashboardHandler(BaseHTTPRequestHandler):
         global _reset_in_progress
         parsed = urlparse(self.path)
 
+        if parsed.path == "/api/login":
+            content_len = int(self.headers.get("Content-Length", "0") or "0")
+            body = self.rfile.read(content_len).decode("utf-8") if content_len else "{}"
+            try:
+                payload = json.loads(body)
+            except Exception:
+                payload = {}
+            username = payload.get("username", "").strip()
+            password = payload.get("password", "")
+            if username in _users and _users[username] == hash_password(password):
+                token = secrets.token_hex(32)
+                sessions[token] = username
+                resp_body = json.dumps({"ok": True, "username": username}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Set-Cookie", f"session={token}; HttpOnly; Path=/; SameSite=Strict")
+                self.send_header("Content-Length", str(len(resp_body)))
+                self.end_headers()
+                self.wfile.write(resp_body)
+            else:
+                self._send_json({"ok": False, "message": "Invalid credentials"}, status=401)
+            return
+
+        if parsed.path == "/api/logout":
+            cookie = self.headers.get("Cookie", "")
+            for part in cookie.split(";"):
+                part = part.strip()
+                if part.startswith("session="):
+                    sessions.pop(part[8:], None)
+            self._send_json({"ok": True})
+            return
+
+        # Auth check for all other POST endpoints
+        if check_session(self) is None:
+            self._send_json({"error": "Unauthorized"}, status=401)
+            return
+
         if parsed.path == "/api/clear_logs":
             _reset_in_progress = True
             cleared = []
@@ -701,13 +833,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 product = payload.get("product", "SOLUSDT")
                 agent_name = payload.get("agent", "Mean Reversion")
 
-                if agent_name == "DQN":
-                    self._send_json({"ok": False, "message": "DQN : modèle non trouvé. Placer le fichier models/dqn_agent.pth pour activer cet agent."}, status=400)
-                    return
-                if agent_name == "PPO":
-                    self._send_json({"ok": False, "message": "PPO : TensorFlow non disponible sur Python 3.14."}, status=400)
-                    return
-
                 with state_lock:
                     process_state["product"] = product
                     process_state["agent_name"] = agent_name
@@ -761,6 +886,43 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": False, "message": f"Failed to start simulation: {exc}"}, status=500)
             return
 
+        if parsed.path == "/api/start_market":
+            try:
+                content_len = int(self.headers.get("Content-Length", "0") or "0")
+                body = self.rfile.read(content_len).decode("utf-8") if content_len else "{}"
+                payload = json.loads(body)
+                product = payload.get("product", "SOLUSDT")
+
+                with state_lock:
+                    process_state["product"] = product
+                    if process_alive(process_state["market"]):
+                        kill_process_group(process_state["market"])
+                        process_state["market"] = None
+                    chart_state["candles"] = []
+                    chart_state["current"] = None
+                    chart_state["tick"] = 0
+                    chart_state["markers"] = []
+                    chart_state["last_mid"] = None
+                    chart_state["symbol"] = product
+                    perf_state["baseline_equity"] = None
+                    perf_state["series"] = []
+                    perf_state["ticks"] = []
+
+                try:
+                    if MARKET_STATE_FILE.exists():
+                        MARKET_STATE_FILE.unlink()
+                except Exception:
+                    pass
+
+                if product not in inventory_per_product:
+                    inventory_per_product[product] = 0.0
+
+                start_market(product)
+                self._send_json({"ok": True, "message": f"Market started for {product}"})
+            except Exception as exc:
+                self._send_json({"ok": False, "message": str(exc)}, status=500)
+            return
+
         if parsed.path == "/api/stop_simulation":
             try:
                 with state_lock:
@@ -782,6 +944,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 def run_server(port: int = 8090):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    load_users()
+    load_inventory()
     server = ThreadingHTTPServer(("127.0.0.1", port), DashboardHandler)
     print(f"MarketMind dashboard server running: http://127.0.0.1:{port}")
     try:

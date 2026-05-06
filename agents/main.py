@@ -27,7 +27,7 @@ def main():
             "sma": (".strategies.sma", "SMAStrategy"),
             "random": (".strategies.random_coin", "RandomStrategy"),
             "a2c": (".strategies.a2c_rl", "A2CStrategy"),
-            "dqn": (".strategies.dqn_agent", "DQNStrategy"),
+            "dqn": (".strategies.dqn_agent_faster", "DQNStrategy"),
             "ppo": (".strategies.PPO_agent", "PPOStrategy"),
         }
 

@@ -21,6 +21,7 @@
               ${C.orderBookCard(state.orderBook)}
               ${C.chartCard()}
             </div>
+            ${C.pnlCard()}
           </section>
 
           ${C.rightPanel(state.products, state.agents)}
@@ -222,6 +223,85 @@
     }
   }
 
+  function renderPnlChart(series) {
+    const container = document.getElementById("pnl-chart");
+    const valueEl = document.getElementById("pnl-value");
+    if (!container) return;
+
+    const last = series.length ? series[series.length - 1] : 0;
+    if (valueEl) {
+      valueEl.textContent = (last >= 0 ? "+" : "") + "$" + Math.abs(last).toFixed(2);
+      valueEl.className = "pnl-value " + (last >= 0 ? "pos" : "neg");
+    }
+
+    if (!series.length) {
+      container.innerHTML = '<div class="pnl-empty">En attente de données...</div>';
+      return;
+    }
+
+    const W = 400;
+    const H = 80;
+    const px = 4;
+    const min = Math.min(0, ...series);
+    const max = Math.max(0, ...series);
+    const range = max - min || 1;
+    const xOf = (i) => px + (i / Math.max(1, series.length - 1)) * (W - 2 * px);
+    const yOf = (v) => px + (H - 2 * px) - ((v - min) / range) * (H - 2 * px);
+    const pts = series.map((v, i) => `${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`).join(" ");
+    const zero = yOf(0).toFixed(1);
+    const color = last >= 0 ? "#2ecc71" : "#e74c3c";
+    const fillPts = `${xOf(0).toFixed(1)},${zero} ${pts} ${xOf(series.length - 1).toFixed(1)},${zero}`;
+
+    container.innerHTML = `
+      <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="pnl-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.28"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
+          </linearGradient>
+        </defs>
+        <polygon points="${fillPts}" fill="url(#pnl-grad)"/>
+        <line x1="${px}" y1="${zero}" x2="${W - px}" y2="${zero}"
+              stroke="rgba(159,179,209,0.25)" stroke-width="1" stroke-dasharray="4,3"/>
+        <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="${xOf(series.length - 1).toFixed(1)}" cy="${yOf(last).toFixed(1)}" r="3.5" fill="${color}"/>
+      </svg>`;
+  }
+
+  function renderPnlStats(history) {
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    set("stat-winrate",  history.win_rate  != null ? `${history.win_rate.toFixed(1)}%` : "--");
+    set("stat-avgprofit", history.avg_profit != null && history.avg_profit !== 0 ? `+$${history.avg_profit.toFixed(2)}` : "--");
+    set("stat-avgloss",  history.avg_loss  != null && history.avg_loss  !== 0 ? `$${history.avg_loss.toFixed(2)}`  : "--");
+    set("stat-trades",   history.trades    != null ? `${history.trades}` : "--");
+  }
+
+  function renderInventoryBar(inventory) {
+    const bar = document.getElementById("inv-risk-bar");
+    const pct = document.getElementById("inv-risk-pct");
+    if (!bar || !pct) return;
+    const abs = Math.abs(inventory || 0);
+    const MAX_INV = 10;
+    const ratio = Math.min(1, abs / MAX_INV);
+    const pctVal = Math.round(ratio * 100);
+    bar.style.width = `${pctVal}%`;
+    bar.className = "inv-risk-bar " + (ratio > 0.66 ? "danger" : ratio > 0.33 ? "warn" : "safe");
+    pct.textContent = `${pctVal}%`;
+  }
+
+  function renderLastDecision(decision) {
+    const badge = document.getElementById("decision-badge");
+    const timeEl = document.getElementById("decision-time");
+    if (!badge) return;
+    const action = decision?.action || "—";
+    badge.textContent = action;
+    badge.className = "decision-badge " + (
+      action === "BUY"  ? "buy"  :
+      action === "SELL" ? "sell" : "hold"
+    );
+    if (timeEl) timeEl.textContent = (decision?.time && decision.time !== "—") ? decision.time : "";
+  }
+
   function renderPortfolio(midPrice) {
     const tbody = document.getElementById("portfolio-body");
     if (!tbody) return;
@@ -351,7 +431,12 @@
       const res = await fetch("/api/snapshot");
       const snap = await res.json();
 
-      const { market, trades, status, metrics, chart, history } = snap;
+      const { market, trades, status, metrics, chart, history, performance, last_decision, username } = snap;
+
+      if (username) {
+        const el = document.getElementById("topbar-username");
+        if (el) el.textContent = username;
+      }
 
       applyMarketState(market);
       lastMetrics = { ...metrics, _mid: market?.mid_price ? market.mid_price / 100 : null };
@@ -365,6 +450,10 @@
       renderSidebarMetrics(metrics);
       renderDetailPanel();
       renderPortfolio(market?.mid_price ? market.mid_price / 100 : null);
+      renderPnlChart(performance?.series || []);
+      renderPnlStats(history);
+      renderInventoryBar(metrics?.inventory);
+      renderLastDecision(last_decision);
 
       state.tradeLog = Array.isArray(trades) ? trades : [];
       renderTradeLog();
@@ -512,12 +601,46 @@
             setInfo(`Symbol switched to ${selectedProduct}.`);
             await loadLiveData();
           } else {
-            // Ajout d'un délai même si pas de simulation
-            await new Promise((r) => setTimeout(r, 600));
+            // Simulation pas lancée — démarrer quand même le marché pour avoir les prix live
+            const selectedProduct = productSelect.value || "SOLUSDT";
+            setInfo(`Loading market data for ${selectedProduct}...`);
+            setSwitchingState(true);
+            await fetch("/api/start_market", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ product: selectedProduct }),
+            });
+            await new Promise((r) => setTimeout(r, 1200));
+            setInfo(`Showing live prices for ${selectedProduct}.`);
             await loadLiveData();
           }
         } catch (_) {
           setError("Failed to switch symbol while running.");
+        } finally {
+          setSwitchingState(false);
+        }
+      });
+    }
+
+    if (agentSelect) {
+      agentSelect.addEventListener("change", async () => {
+        try {
+          const statusRes = await fetch("/api/status");
+          if (!statusRes.ok) return;
+          const status = await statusRes.json();
+          if (status.market_running || status.agent_running) {
+            const selectedProduct = productSelect?.value || status.product || "SOLUSDT";
+            const selectedAgent = agentSelect.value;
+            setInfo(`Switching agent to ${selectedAgent}...`);
+            setError("");
+            setSwitchingState(true);
+            await startSimulation(selectedProduct, selectedAgent);
+            await new Promise((r) => setTimeout(r, 800));
+            setInfo(`Agent switched to ${selectedAgent}.`);
+            await loadLiveData();
+          }
+        } catch (_) {
+          setError("Failed to switch agent while running.");
         } finally {
           setSwitchingState(false);
         }
@@ -598,6 +721,13 @@
     }
   }
 
+  async function logout() {
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } catch (_) {}
+    window.location.replace("/login");
+  }
+
   function init() {
     renderLayout();
     initTVChart();
@@ -605,6 +735,17 @@
     bindControls();
     bindSidebar();
     renderDetailPanel();
+
+    const logoutBtn = document.getElementById("logout-btn");
+    if (logoutBtn) logoutBtn.addEventListener("click", logout);
+
+    // Démarrer le marché par défaut au chargement pour avoir les prix live immédiatement
+    const defaultProduct = document.getElementById("product-select")?.value || "SOLUSDT";
+    fetch("/api/start_market", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ product: defaultProduct }),
+    }).catch(() => {});
 
     loadLiveData();
     pollTimer = setInterval(loadLiveData, 2000);
