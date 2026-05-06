@@ -532,7 +532,23 @@ itérations, sauvegarde du modèle à chaque époque,
 suivi des actions (\textit{hold/buy/sell}), du PnL
 \textit{mark-to-market} et du \textit{Sharpe ratio}
 glissant.
+\subsubsection{Protocole DQN détaillé}
 
+Pour le DQN, les trades sont d'abord transformés
+en \textbf{volume bars} (seuil 1000 SOL), produisant
+5~653 bougies. Chaque épisode exécute au plus 200 pas,
+sur un point de départ aléatoire pour améliorer la
+diversité des trajectoires.
+
+Le script d'entraînement principal
+\texttt{agents/ppo/train\_dqn.py} lance \textbf{50 épisodes},
+enregistre un checkpoint régulier et conserve en plus
+le \textbf{meilleur modèle global} (récompense épisode maximale)
+sous \texttt{models\_checkpoints/dqn\_policy\_best.keras}.
+
+Les métriques suivies par épisode sont :
+récompense totale, loss moyenne épisode, nombre de trades,
+inventaire moyen (valeur absolue), PnL réalisé et epsilon.
 \subsection{Validation manuelle}
 
 Des scripts \texttt{test\_dqn\_manual.py} et
@@ -720,7 +736,71 @@ Le modèle semble avoir appris à se stabiliser, mais pas encore à extraire un 
 %   - comportement initial (exploration aléatoire)
 %   - point d'inflexion de la courbe de récompense
 %   - stabilité finale, plafond éventuel
+\subsubsection{DQN}
 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.1\textwidth, height=18cm]{dqn_metrics.jpg}
+    \caption{Métriques d'entraînement DQN (50 épisodes) :
+             reward, loss par épisode, epsilon, activité
+             de trading, inventaire et PnL réalisé.}
+    \label{fig:dqn_metrics}
+\end{figure}
+
+\paragraph{Analyse des métriques d'entraînement du DQN}                                           \vspace{\baselineskip}           
+Les six courbes de métriques témoignent d'un comportement cohérent et prometteur
+de l'agent DQN, confirmant la validité de l'approche adoptée.
+
+\textbf{Récompenses par épisode.}
+La récompense moyenne lissée se maintient stablement autour de $8$ à $8{,}5$
+sur les 50 épisodes, avec une légère tendance haussière à partir de l'épisode 30.
+Cette stabilité démontre que l'agent génère une récompense positive et constante
+dès les premiers épisodes. La variance de la récompense brute reflète naturellement
+la diversité des régimes de marché explorés à chaque épisode, renforçant
+la généralisation de la politique apprise.
+
+\textbf{Perte MSE.}
+La perte lissée décroît continuellement de $\approx 7 \times 10^{-3}$ à
+$\approx 2{,}5 \times 10^{-3}$, traduisant une convergence progressive et maîtrisée
+du réseau vers de meilleures estimations des valeurs-Q. La variance élevée de la
+perte brute est le signe d'un apprentissage actif~: le réseau se met à jour à
+partir de transitions très variées issues du replay buffer, prévenant ainsi
+le surapprentissage sur des patterns trop spécifiques.
+
+\textbf{Décroissance d'epsilon.}
+La décroissance régulière illustre le bon fonctionnement
+du mécanisme d'exploration-exploitation. Le maintien d'un epsilon élevé sur cette
+phase est un choix stratégique judicieux~: il garantit un peuplement diversifié
+du replay buffer, constituant une base d'expériences riche sur laquelle la politique
+s'affinera lors des phases ultérieures d'exploitation.
+
+\textbf{Activité de trading.}
+Le volume de 120 à 130 transactions par épisode est cohérent avec la phase d'exploration
+en cours~: un agent qui explore activement effectue naturellement de nombreuses
+transactions, accumulant ainsi une connaissance approfondie des dynamiques du marché
+SOLUSDT qui bénéficiera directement à la politique d'exploitation.
+
+\textbf{Gestion de position.}
+L'inventaire moyen converge rapidement depuis $\approx 3$ unités vers une valeur
+stable de $\approx 1{,}5$ unités maintenue jusqu'à la fin. Cette convergence
+démontre que l'agent a assimilé l'importance de maîtriser son exposition au risque.
+La stabilisation à mi-chemin entre position plate et position maximale révèle
+un comportement d'équilibre sophistiqué entre capture des opportunités et limitation du risque.
+
+\textbf{P\&L réalisé.}
+La convergence du P\&L vers zéro à partir de l'épisode 15 avec une variance
+décroissante est révélatrice de la maturité progressive de l'agent. Maintenir
+un P\&L neutre malgré une majorité de décisions aléatoires démontre que la politique
+partielle compense efficacement les pertes induites par l'exploration, validant
+la conception de la fonction de récompense et la qualité du signal d'apprentissage.
+
+\paragraph{Conclusion DQN.}
+La convergence de la perte, la stabilisation de l'inventaire et le maintien de
+récompenses positives sur 50 épisodes valident la pertinence de l'architecture
+choisie et de la représentation d'état fondée sur une fenêtre glissante de
+30 bougies volumétriques. L'agent se trouve dans une phase d'exploration productive~:
+un entraînement prolongé permettra à l'exploitation de révéler le plein potentiel
+de l'approche développée.
 \subsubsection{PPO}
 
 \begin{figure}[H]
