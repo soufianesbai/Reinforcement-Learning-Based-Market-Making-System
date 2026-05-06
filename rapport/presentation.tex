@@ -481,32 +481,39 @@
 % --- Slide 18 : Actor-Critic (schéma)
 \begin{frame}{A2C -- Actor-Critic}
     \centering
-    \begin{tikzpicture}[
-        every node/.style={font=\footnotesize},
-        box/.style={draw, rounded corners, minimum width=2cm, minimum height=1cm, align=center},
-        arr/.style={->, thick, >=stealth}
-    ]
-        \node[box, fill=gray!20] (s) at (0,0) {État $s$};
-        \node[box, fill=enseirbblue!25] (trunk) at (3,0) {Tronc partagé};
-        \node[box, fill=enseirbaccent!25] (actor)  at (6.5,1)  {\textbf{Acteur}\\\tiny$\pi(a|s)$};
-        \node[box, fill=bidgreen!25]      (critic) at (6.5,-1) {\textbf{Critique}\\\tiny$V(s)$};
+    % \begin{tikzpicture}[
+    %     every node/.style={font=\footnotesize},
+    %     box/.style={draw, rounded corners, minimum width=2cm, minimum height=1cm, align=center},
+    %     arr/.style={->, thick, >=stealth}
+    % ]
+    %     \node[box, fill=gray!20] (s) at (0,0) {État $s$};
+    %     \node[box, fill=enseirbblue!25] (trunk) at (3,0) {Tronc partagé};
+    %     \node[box, fill=enseirbaccent!25] (actor)  at (6.5,1)  {\textbf{Acteur}\\\tiny$\pi(a|s)$};
+    %     \node[box, fill=bidgreen!25]      (critic) at (6.5,-1) {\textbf{Critique}\\\tiny$V(s)$};
 
-        \draw[arr] (s) -- (trunk);
-        \draw[arr] (trunk) -- (actor);
-        \draw[arr] (trunk) -- (critic);
+    %     \draw[arr] (s) -- (trunk);
+    %     \draw[arr] (trunk) -- (actor);
+    %     \draw[arr] (trunk) -- (critic);
 
-        \node[font=\tiny] at (9,1)  {action $a_t$};
-        \node[font=\tiny] at (9,-1) {valeur $V_t$};
-        \draw[arr] (actor)  -- (9,1);
-        \draw[arr] (critic) -- (9,-1);
-    \end{tikzpicture}
+    %     \node[font=\tiny] at (9,1)  {action $a_t$};
+    %     \node[font=\tiny] at (9,-1) {valeur $V_t$};
+    %     \draw[arr] (actor)  -- (9,1);
+    %     \draw[arr] (critic) -- (9,-1);
+    % \end{tikzpicture}
 
-    \vspace{0.3cm}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.6\textwidth]{figures/Advantage-Actor-Critic-A2C-architecture.png}
+        \caption{Principe général de l'architecture Actor-Critic utilisée pour A2C.}
+        \label{fig:a2c_architecture}
+    \end{figure}
+
+    \vspace{0cm}
     \footnotesize
     \begin{tabular}{ll}
         \alert{Avantage} & $A_t = R_t - V(s_t)$ \\
-        $\mathcal{L}_{\text{actor}}$  & $-\log \pi(a_t|s_t)\, A_t$ \\
-        $\mathcal{L}_{\text{critic}}$ & $(R_t - V(s_t))^2$ \\
+        \alert{$\mathcal{L}_{\text{actor}}$}  & $-\log \pi(a_t|s_t)\, A_t$ \\
+        \alert{$\mathcal{L}_{\text{critic}}$} & $(R_t - V(s_t))^2$ \\
     \end{tabular}
 \end{frame}
 
