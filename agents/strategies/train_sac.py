@@ -36,6 +36,7 @@ import time
 import csv
 import random
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -601,5 +602,4 @@ def train():
 
 
 if __name__ == "__main__":
-    from typing import Optional
     train()

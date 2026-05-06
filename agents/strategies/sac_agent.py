@@ -302,7 +302,6 @@ class SACStrategy(BaseStrategy):
         self.market_data = MarketData()
         self._mid_history: deque = deque(maxlen=history_len + 1)
         self._vol_history: deque = deque(maxlen=20)
-        self._buyer_frac_history: deque = deque(maxlen=1)
         self._inventory: float = 0.0
 
     def set_runtime_context(self, inventory: Optional[float] = None, cash: Optional[float] = None) -> None:
