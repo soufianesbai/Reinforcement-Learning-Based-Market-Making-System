@@ -431,51 +431,169 @@
     \end{block}
 \end{frame}
 
-% --- Slide 16 : DQN (architecture visuelle)
-\begin{frame}{DQN -- Deep Q-Network}
-    \centering
-    \begin{tikzpicture}[
-        every node/.style={font=\footnotesize},
-        layer/.style={draw, rounded corners, minimum width=1.5cm, minimum height=2.5cm, align=center},
-        arr/.style={->, thick, >=stealth}
-    ]
-        \node[layer, fill=enseirbblue!10]  (s)  at (0,0)   {\textbf{État}\\$s_t$\\\tiny dim 6};
-        \node[layer, fill=enseirbblue!20]  (h1) at (2,0)   {\textbf{MLP}\\\tiny SiLU\\\tiny LayerNorm};
-        \node[layer, fill=enseirbblue!30]  (du) at (4.5,0.9){\textbf{V(s)}};
-        \node[layer, fill=enseirbblue!30]  (du2)at (4.5,-0.9){\textbf{A(s,a)}};
-        \node[layer, fill=enseirbaccent!25](q)  at (7,0)   {\textbf{Q(s,a)}\\\tiny BUY\\\tiny SELL\\\tiny HOLD};
+% ---------------------------------------------------------------
+% Slide 16a : DQN -- contexte et fonctionnement
+% ---------------------------------------------------------------
+\begin{frame}{DQN -- Fonctionnement dans notre contexte}
 
-        \draw[arr] (s) -- (h1);
-        \draw[arr] (h1) -- (du);
-        \draw[arr] (h1) -- (du2);
-        \draw[arr] (du) -- (q);
-        \draw[arr] (du2) -- (q);
+\begin{columns}[T]
 
-        \node[font=\scriptsize, enseirbaccent] at (4.5, 2.2) {\textbf{Dueling}};
-    \end{tikzpicture}
+%% Colonne gauche : flux principal
+\begin{column}{0.48\textwidth}
+\centering
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize},
+    box/.style={draw, rounded corners=4pt, align=center,
+                minimum width=1.6cm, minimum height=0.5cm},
+    arr/.style={->, thick, >=stealth, shorten >=2pt, shorten <=2pt}
+]
 
-    \vspace{0.4cm}
-    \footnotesize
-    \begin{tabular}{ll}
-        \alert{Dueling} & $Q(s,a) = V(s) + (A(s,a) - \overline{A})$ \\
-        \alert{Double DQN} & cible découplée, anti-surestimation \\
-        \alert{Replay buffer} & 200\,k transitions \\
-        \alert{Huber loss} + clipping & stabilité numérique \\
-    \end{tabular}
+%% État
+\node[box, fill=enseirbblue!10, text width=1.8cm] (s) at (0,0)
+    {\textbf{État $s_t$}\\\tiny dim 211\\fenêtre 30 b.};
+
+%% Réseau Q
+\node[box, fill=enseirbblue!25, text width=2.2cm] (q) at (2.8,0)
+    {\textbf{Q-Network}\\\tiny MLP [512,512,256,128]};
+
+%% Actions
+\node[box, fill=enseirbaccent!20, text width=1.3cm] (buy)  at (5.2, 0.7)
+    {\textbf{BUY}};
+\node[box, fill=gray!12, text width=1.3cm] (hold) at (5.2, 0.0)
+    {\textbf{HOLD}};
+\node[box, fill=enseirbaccent!40, text width=1.3cm] (sell) at (5.2,-0.7)
+    {\textbf{SELL}};
+
+%% Flèches réseau → actions
+\draw[arr] (s) -- (q);
+\draw[arr] (q) -- (buy);
+\draw[arr] (q) -- (hold);
+\draw[arr] (q) -- (sell);
+
+%% ε-greedy
+\node[font=\tiny, enseirbaccent] at (5.2,-1.3)
+    {$\varepsilon$-greedy $1.0\!\to\!0.01$};
+
+%% Reward
+\node[box, fill=green!10, text width=2.4cm] (r) at (2.8,-2.2)
+    {\textbf{Reward}\\\tiny $r = \Delta\text{PnL} - \lambda i^2$\\$+ 0.1\cdot\mathbf{1}[\text{act}\neq H]$};
+
+\draw[arr] (buy)  to[out=-90, in=30]  (r);
+\draw[arr] (hold) to[out=-90, in=10]  (r);
+\draw[arr] (sell) to[out=-90, in=-10] (r);
+
+%% Replay buffer
+\node[box, fill=enseirbblue!8, text width=2.4cm] (rb) at (0,-2.2)
+    {\textbf{Replay buffer}\\\tiny 50k transitions\\batch 32};
+
+\draw[arr] (r)  -- node[above, font=\tiny] {stocke} (rb);
+\draw[arr] (rb) to[out=90, in=-90] node[left, font=\tiny] {update} (q);
+
+\end{tikzpicture}
+\end{column}
+
+%% Colonne droite : détails de l'état
+\begin{column}{0.48\textwidth}
+\small
+\textbf{Espace d'état (dim 211)}
+
+\begin{itemize}
+    \item 7 features $\times$ 30 bougies
+    \item close, high, low, volume
+    \item return, SMA5, SMA15
+    \item inventaire normalisé ($+1$)
+    \item volume bars (seuil 1000 SOL)
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Équation de Bellman}
+\[
+Q(s,a) \leftarrow r + \gamma \max_{a'} Q_{\theta^-}(s',a')
+\]
+\[
+\mathcal{L} = \bigl(Q_{\theta^-}(s',a')-Q_\theta(s,a)\bigr)^2
+\]
+
+\end{column}
+\end{columns}
+
+\end{frame}
+
+
+% ---------------------------------------------------------------
+% Slide 16b : DQN -- Implémentation, choix et justifications
+% ---------------------------------------------------------------
+\begin{frame}{DQN -- Implémentation et justifications}
+
+\begin{columns}[T]
+
+\begin{column}{0.32\textwidth}
+\small
+\textbf{Architecture}
+
+\vspace{0.1cm}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Couches & {[512,512,256,128]} \\
+Activation & ReLU \\
+Sortie & dim 3 (B/H/S) \\
+\bottomrule
+\end{tabular}
+\vspace{0.2cm}
+
+\alert{Profond :}\\
+Capacité pour dynamique non linéaire des crypto.
+\end{column}
+
+\begin{column}{0.32\textwidth}
+\small
+\textbf{Stabilisation}
+
+\vspace{0.1cm}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Target network & sync 1000 \\
+Replay buffer & 50k entrées \\
+Batch & 32 \\
+Loss & MSE \\
+Grad clip & $[-5,5]$ \\
+\bottomrule
+\end{tabular}
+\vspace{0.2cm}
+
+\alert{Target net :} évite cible mouvante\\
+\alert{Replay :} brise corrélations
+\end{column}
+
+\begin{column}{0.32\textwidth}
+\small
+\textbf{Hyperparamètres}
+
+\vspace{0.1cm}
+\begin{tabular}{@{}ll@{}}
+\toprule
+$\gamma$ & 0.99 \\
+lr & $10^{-3}$ \\
+$\varepsilon$ & $1.0\!\to\!0.01$ \\
+Decay & 0.995/ep \\
+$\lambda$ inv. & 0.01 \\
+Bonus action & $+0.1$ \\
+Épisodes & 50 \\
+\bottomrule
+\end{tabular}
+\vspace{0.2cm}
+
+\alert{Reward shaping :}\\
+Pénalise \textit{hold} passif
+\end{column}
+\end{columns}
+
 \end{frame}
 
 % --- Slide 17 : DQN courbes
 \begin{frame}{DQN -- Apprentissage}
     \centering
-    \IfFileExists{figures/dqn_training_metrics.png}{%
-        \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{dqn_training_metrics.png}
-    }{%
-        \IfFileExists{dqn_training_metrics.png}{%
-            \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{dqn_training_metrics.png}
-        }{%
-            \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{a2c_training_metrics.png}
-        }
-    }
+        \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{dqn_metrics.jpg}
 \end{frame}
 
 % --- Slide 18 : Actor-Critic (schéma)
