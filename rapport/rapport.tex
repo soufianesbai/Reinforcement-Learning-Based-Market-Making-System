@@ -742,19 +742,102 @@ $\lambda=0{,}95$), normalisation par percentiles 5/95,
 EMA du critique cible (décroissance $0{,}98$).
 Actions discrètes : HOLD, BUY, SELL.
 
-\paragraph{SAC (Soft Actor-Critic).}
-Algorithme off-policy entropy-regularized implémentant une
-\textbf{stratégie de market making} : contrairement aux agents
-directionnels, SAC place simultanément des ordres bid et ask
-autour du midprice pour capturer le spread sans parier sur la
-direction du prix. L'action est continue :
-$(b_s,\,a_s) \in [0,\,0.5\%]^2$ (bid/ask spread).
-Architecture : acteur MLP + twin critic (clipped double-Q),
-coefficient d'entropie fixe $\alpha = 0.2$, replay buffer
-de $500\,000$ transitions, soft target update $\tau = 0.005$.
-La récompense suit l'approche Avellaneda-Stoikov : spread
-capturé à chaque fill, pénalisé par un terme quadratique
-sur l'inventaire et un terme de sélection adverse.
+\paragraph{SAC (Soft Actor-Critic) -- implémentation du projet.}
+
+Contrairement aux agents directionnels (DQN, A2C), SAC implémente une
+\textbf{stratégie de market making} : l'agent place simultanément
+des ordres bid et ask autour du midprice pour capturer le spread
+sans parier sur la direction du prix. SAC est un algorithme
+\textbf{off-policy entropy-regularized} : l'objectif combine la
+maximisation des récompenses et la maximisation de l'entropie de
+la politique, ce qui encourage l'exploration tout en évitant la
+convergence prématurée vers une politique sous-optimale.
+
+\subparagraph{Architecture -- Acteur et Twin Critic.}
+L'acteur est un réseau MLP (2 couches cachées de 256 neurones,
+LayerNorm, SiLU) qui produit, pour chaque état $s$, une
+distribution gaussienne paramétrisée par $\mu(s)$ et
+$\log\sigma(s)$. Un squashing tanh suivi d'un rescaling donne
+l'action continue :
+\[
+(b_s,\,a_s) = \tfrac{1}{2}\bigl(\tanh(\mu + \sigma\varepsilon) + 1\bigr)
+\cdot s_{\max} \in [0,\,0.5\%]^2, \quad \varepsilon \sim \mathcal{N}(0,I).
+\]
+L'architecture repose sur deux réseaux critic $Q_1$ et $Q_2$
+indépendants (\textbf{clipped double-Q}) : la cible utilise
+$\min(Q_1, Q_2)$ pour éviter la surestimation systématique des
+valeurs-Q, défaut connu des algorithmes actor-critic.
+
+\subparagraph{Fonctions de loss.}
+La perte de l'acteur maximise les Q-valeurs tout en maintenant
+une entropie suffisante :
+\[
+\mathcal{L}_{\text{actor}} = \mathbb{E}_{s \sim D}
+\bigl[\alpha \log \pi(a|s) - Q_{\min}(s,a)\bigr].
+\]
+La perte du critic minimise l'erreur de Bellman avec cible soft :
+\[
+\mathcal{L}_{\text{critic}} = \mathbb{E}_{(s,a,r,s') \sim D}
+\!\Bigl[\bigl(r + \gamma\bigl(\min_i Q_i(s',a')
+- \alpha\log\pi(a'|s')\bigr) - Q_i(s,a)\bigr)^2\Bigr].
+\]
+Le coefficient d'entropie est fixé à $\alpha = 0.2$ sans
+auto-tuning : l'espace d'action contraint $[0,\,0.5\%]^2$ rend
+les gradients de $\alpha$ instables, d'où le choix d'une valeur fixe.
+
+\subparagraph{Espace d'état -- STATE\_DIM = 15.}
+Le vecteur d'état est construit par \texttt{build\_sac\_state},
+partagé entre entraînement et inférence live pour garantir la cohérence :
+\begin{itemize}[leftmargin=1.2cm]
+  \item \textbf{Inventaire normalisé} $\in [-1,1]$ : position courante
+        divisée par \texttt{inventory\_scale}, indispensable pour que
+        l'agent connaisse son exposition et gère le risque directionnel.
+  \item \textbf{10 log-retours} clippés à $\pm 5\%$ : historique des
+        prix récents capturant la direction et la dynamique de court terme.
+  \item \textbf{Volatilité réalisée} : écart-type des retours sur la
+        fenêtre, permet à l'agent d'adapter ses spreads aux régimes
+        calmes ou agités.
+  \item \textbf{Buyer fraction} $\in [0,1]$ : proportion de trades
+        initiés côté acheteur, mesure de la pression directionnelle
+        instantanée.
+  \item \textbf{Spread de marché en bps} : spread du carnet d'ordres,
+        signal de liquidité et de compétitivité des quotes.
+  \item \textbf{Volume ratio} : volume relatif par rapport à la moyenne
+        récente, indicateur d'activité du marché.
+\end{itemize}
+
+\subparagraph{Fonction de récompense -- Avellaneda-Stoikov.}
+\[
+r = \underbrace{\Delta\text{mid} \times \text{qty}}_{\text{spread capturé}}
+  - \underbrace{\lambda\,\frac{I^2}{\sigma}}_{\text{pénalité inventaire}}
+  - \underbrace{\lambda_{\text{adv}}\,\delta_{\text{adv}}}_{\text{sélection adverse}}
+\]
+Le premier terme récompense la capture du spread à chaque fill.
+La pénalité quadratique sur l'inventaire $I$ décourage l'accumulation
+de positions directionnelles qui exposent l'agent au risque de prix.
+Le terme de sélection adverse pénalise les situations où le prix
+se déplace défavorablement juste après un fill -- signe que l'agent
+a été adverse selected par un intervenant mieux informé.
+
+\subparagraph{Hyperparamètres et justifications.}
+\begin{itemize}[leftmargin=1.2cm]
+  \item $\textbf{lr} = 3\times10^{-4}$ : taux d'apprentissage Adam
+        validé empiriquement sur les données crypto, identique à DQN/PPO.
+  \item \textbf{Batch 256} : réduit la variance du gradient estimé et
+        améliore la stabilité, au même titre que pour DQN.
+  \item \textbf{Replay buffer 500~000} : deux fois et demi plus grand
+        que DQN, nécessaire pour un algorithme off-policy qui recycle
+        les transitions -- plus le buffer est large, plus la distribution
+        des expériences passées est diversifiée.
+  \item $\boldsymbol{\tau = 0.005}$ (soft update) : mise à jour
+        progressive des réseaux cibles, évite les oscillations
+        d'entraînement dues à des sauts brusques de la cible.
+  \item \textbf{20 épisodes de warmup} : peuple le buffer avant la
+        première mise à jour pour éviter d'apprendre sur des mini-batchs
+        non représentatifs.
+  \item \textbf{2 gradient steps / step d'environnement} : tire
+        mieux parti du replay buffer off-policy sans surentraîner.
+\end{itemize}
 
 \subsection{Infrastructure d'entraînement}
 
