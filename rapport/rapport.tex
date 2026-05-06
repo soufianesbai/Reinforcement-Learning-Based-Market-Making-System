@@ -238,8 +238,8 @@ Le client souhaite disposer d'une plateforme permettant :
     \item \textbf{Bella Taleb El Alem} : agent PPO
     \item \textbf{Yani Haouchine} : agent Dreamer~v3
     \item \textbf{Ihab Jaouad} : agent DQN
-    \item \textbf{Anas Benbaki} : agent A2C et moteur de carnet d'ordres C++
-    \item \textbf{Mohamed Aziz Migaou} : agent Dreamer~v3 et moteur de carnet d'ordres C++
+    \item \textbf{Anas Benbaki} : agent A2C
+    \item \textbf{Mohamed Aziz Migaou} : agent Dreamer~v3 moteur de carnet d'ordres C++
     \item \textbf{Soufiane Sbai} : tableau de bord
 \end{itemize}
 
@@ -425,223 +425,22 @@ P_t > \mathrm{SMA}_n(t)+2\sigma_t \Rightarrow \mathrm{SELL}, \quad
 
 \subsubsection{Apprentissage par renforcement}
 
-\paragraph{DQN (Deep Q-Network) -- implémentation du projet.}
-
-L'agent DQN implémenté repose sur une approximation de la fonction
-d'action-valeur $Q_\theta(s,a)$ via un réseau de neurones entraîné
-par l'équation de Bellman :
-\[
-Q(s_t,a_t) \;\leftarrow\; r_t + \gamma \max_{a'} Q_{\theta^-}(s_{t+1},a').
-\]
-
-\subparagraph{Architecture -- réseau Dueling.}
-Contrairement à un MLP classique qui produit directement les
-$Q$-valeurs, l'architecture \textit{dueling} décompose la sortie
-en deux flux parallèles :
-\[
-Q(s,a) = V(s) + \Bigl(A(s,a) - \frac{1}{|\mathcal{A}|}\sum_{a'}A(s,a')\Bigr),
-\]
-où $V(s)$ est la \textbf{fonction de valeur d'état} (scalaire
-indépendant de l'action) et $A(s,a)$ est la
-\textbf{fonction d'avantage} (combien cette action est meilleure que
-la moyenne). La soustraction de la moyenne de $A$ évite
-l'identifiabilité multiple du couple $(V,A)$ et stabilise
-l'apprentissage. Cette séparation est particulièrement bénéfique
-dans les états où toutes les actions ont une valeur similaire
-(\textit{HOLD} dominant) : le réseau met alors à jour $V(s)$
-sans avoir besoin d'observer toutes les actions.
-
-Les couches cachées utilisent l'activation \textbf{SiLU}
-(\textit{Sigmoid Linear Unit}, $x\cdot\sigma(x)$), plus douce que
-ReLU et moins sujette aux neurones morts, ainsi qu'une
-\textbf{LayerNorm} après chaque couche pour normaliser les
-activations indépendamment de la taille du batch -- ce qui
-stabilise l'entraînement sur des séries financières à forte
-non-stationnarité.
-
-\subparagraph{Double DQN -- réduction du biais de surestimation.}
-Le DQN standard souffre d'un biais systématique : l'opérateur
-$\max$ dans la cible de Bellman tend à surestimer les
-$Q$-valeurs, car il sélectionne et évalue la meilleure action
-avec le \emph{même} réseau. Le \textbf{Double DQN} découple ces
-deux opérations :
-\[
-\text{cible} = r_t + \gamma\,
-Q_{\theta^-}\!\Bigl(s_{t+1},\;\underbrace{\arg\max_{a'}
-Q_\theta(s_{t+1},a')}_{\text{sélection par réseau principal}}\Bigr),
-\]
-le réseau principal $Q_\theta$ \emph{sélectionne} l'action
-optimale, tandis que le réseau cible $Q_{\theta^-}$
-\emph{évalue} sa valeur. Cette séparation réduit la surestimation
-et améliore la stabilité et la qualité finale de la politique
-apprise.
-
-\subparagraph{Espace d'état -- dimension 6.}
-Plutôt qu'une fenêtre glissante de bougies brutes, l'état est
-un vecteur compact de six indicateurs calculés en temps réel
-à partir du carnet d'ordres et de l'historique récent :
-
-\begin{itemize}[leftmargin=1.2cm]
-  \item \textbf{Order flow imbalance} : ratio
-        $\frac{V_{\text{bid}} - V_{\text{ask}}}{V_{\text{bid}} +
-        V_{\text{ask}}}$, mesure la pression acheteuse ou vendeuse
-        instantanée dans le carnet.
-  \item \textbf{Spread normalisé} :
-        $\frac{P_{\text{ask}} - P_{\text{bid}}}{P_{\text{mid}}}$,
-        proxy du coût de transaction et de la liquidité.
-  \item \textbf{Déviation au mid-price} : écart relatif du dernier
-        prix exécuté par rapport au mid-price, signal de pression
-        directionnelle récente.
-  \item \textbf{Momentum} : rendement cumulé sur une fenêtre
-        courte, capte la direction et la force de la tendance
-        immédiate.
-  \item \textbf{Inventaire normalisé} : position courante divisée
-        par la limite maximale ($\pm 3$ unités), indispensable pour
-        que l'agent connaisse son exposition et puisse appliquer
-        l'\textit{inventory guard}.
-  \item \textbf{Volatilité réalisée} : écart type des rendements
-        sur la fenêtre récente, permet à l'agent d'adapter son
-        comportement aux régimes calmes ou agités.
-\end{itemize}
-
-Ce vecteur de dimension 6 est délibérément compact :
-les six indicateurs sont tous calculables en $O(1)$ à partir du
-carnet d'ordres courant, ce qui garantit une latence d'inférence
-minimale en conditions temps réel.
-
-\subparagraph{Replay buffer et stratégie d'échantillonnage.}
-Les transitions $(s_t, a_t, r_t, s_{t+1}, \text{done})$ sont
-stockées dans un buffer circulaire de \textbf{200~000 éléments}.
-Cette taille, quatre fois supérieure à celle d'une implémentation
-naïve, permet de conserver plusieurs heures de données de marché
-à haute fréquence et d'assurer une diversité suffisante des
-régimes présents dans chaque mini-batch. Les transitions sont
-tirées uniformément aléatoirement par lots de \textbf{256}, ce
-qui brise les corrélations temporelles des prix -- un biais
-particulièrement prononcé sur les données crypto où les
-autocorrélations à court terme sont fortes.
-
-\subparagraph{Fonction de perte -- Smooth-L1 et gradient clipping.}
-La perte de Huber (\textit{Smooth-L1}) est définie par :
-\[
-\mathcal{L}_\delta(\delta_i) =
-\begin{cases}
-\tfrac{1}{2}\delta_i^2 & |\delta_i| \le 1,\\
-|\delta_i| - \tfrac{1}{2} & |\delta_i| > 1,
-\end{cases}
-\quad \delta_i = Q_{\theta^-}(s',a^*) - Q_\theta(s,a).
-\]
-Pour les petites erreurs elle se comporte comme la MSE (pénalité
-quadratique, gradient doux) ; pour les grandes erreurs elle devient
-linéaire, ce qui réduit l'influence des transitions anormalement
-coûteuses (\textit{outliers} de marché, flash crashes). En
-complément, un \textbf{gradient clipping} (norme maximale fixée)
-empêche des mises à jour catastrophiques lors de transitions
-exceptionnellement pénalisantes.
-
-\subparagraph{Hyperparamètres et justifications.}
-
-\begin{itemize}[leftmargin=1.2cm]
-  \item $\boldsymbol{\gamma = 0.995}$ : facteur d'actualisation
-        élevé, signifiant que l'agent valorise fortement les
-        récompenses futures. Approprié au trading où les positions
-        ouvertes aujourd'hui voient leur P\&L se matérialiser
-        plusieurs dizaines de pas plus tard.
-  \item $\textbf{lr} = 3\times 10^{-4}$ : taux d'apprentissage
-        standard pour Adam sur des données financières ; suffisamment
-        petit pour éviter les oscillations, suffisamment grand pour
-        converger en quelques dizaines d'épisodes.
-  \item \textbf{Batch 256} : plus grand que le batch 32 classique,
-        ce qui réduit la variance du gradient estimé et améliore la
-        stabilité des mises à jour, au prix d'un coût mémoire
-        légèrement supérieur.
-  \item $\boldsymbol{\varepsilon}$ \textbf{décroissant
-        $1.0 \to 0.01$} : exploration totale en début
-        d'entraînement pour peupler le buffer de transitions variées,
-        puis transition progressive vers l'exploitation de la
-        politique apprise.
-\end{itemize}
+\paragraph{DQN (Deep Q-Network).}
+Réseau \textit{dueling} avec activations SiLU et
+LayerNorm, \textbf{Double DQN}, \textit{replay buffer}
+de 200~000 transitions, perte Smooth-L1, gradient
+clipping. L'espace d'état est de dimension 6
+(imbalance, spread, déviation, momentum, inventaire,
+volatilité réalisée). Trois actions : BUY, SELL, HOLD.
+Hyperparamètres : $\gamma = 0.995$, $\text{lr} =
+3\times 10^{-4}$, batch 256, $\varepsilon$ décroissant
+$1.0 \to 0.01$.
 
 \paragraph{A2C (Advantage Actor-Critic).}
-\paragraph{Principe de l'algorithme}\mbox{} \\
-
-L'agent \textit{Advantage Actor-Critic} (A2C) combine deux réseaux de neurones :
-un \textbf{acteur} qui choisit l'action à exécuter, et un \textbf{critique}
-qui estime la valeur de l'état courant. L'objectif de l'acteur est de
-maximiser la récompense attendue, tandis que le critique apprend à prédire
-la valeur du retour observé afin de réduire la variance de l'apprentissage.
-
-Dans notre implémentation, l'espace d'actions est discret et contient trois
-actions possibles :
-\[
-\mathcal{A} = \{\text{HOLD}, \text{BUY}, \text{SELL}\}.
-\]
-L'agent reçoit à chaque pas de temps un état de dimension 121, construit à
-partir des dernières bougies de volume et de l'inventaire courant.
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.75\textwidth]{figures/Advantage-Actor-Critic-A2C-architecture.png}
-\caption{Principe général de l'architecture Actor-Critic utilisée pour A2C.}
-\label{fig:a2c_architecture}
-\end{figure}
-
-L'observation fournie à l'agent est composée de quatre blocs de 30 valeurs
-normalisées, auxquels s'ajoute une valeur scalaire correspondant à
-l'inventaire, donc un total de 121 dimensions.
-
-\paragraph{Fonction de récompense}\mbox{} \\
-
-La récompense est calculée à chaque pas de temps en fonction de la variation de la valeur du portefeuille, tout en intégrant une gestion du risque liée à l'exposition. 
-
-\subparagraph{1. Valeur du portefeuille}\mbox{} \\
-La valeur totale du portefeuille à l'instant $t$, notée $V_t$, est définie par la somme des liquidités et de la valeur de l'inventaire au prix de clôture :
-\[
-V_t = \text{cash}_t + (I_t \cdot P_t)
-\]
-où :
-\begin{itemize}
-    \item $\text{cash}_t$ représente les liquidités accumulées (achats et ventes).
-    \item $I_t$ est l'inventaire, soit le nombre de contrats détenus.
-    \item $P_t$ est le prix de clôture de la bougie de volume actuelle.
-\end{itemize}
-
-\subparagraph{2. Calcul de la récompense instantanée}\mbox{} \\
-La récompense $r_t$ repose sur le profit ou la perte latent (\textit{Step PnL}) ajusté par une pénalité d'inventaire quadratique :
-\[
-r_t = \text{clip}\left( (V_t - V_{t-1}) - \lambda I_t^2 P_t, \, -10, \, 10 \right)
-\]
-\begin{itemize}
-    \item \textbf{Variation de PnL} ($V_t - V_{t-1}$) : L'agent est récompensé si la valeur totale de ses actifs augmente.
-    \item \textbf{Pénalité d'inventaire} ($\lambda I_t^2 P_t$) : Pour limiter le risque directionnel, une pénalité est appliquée avec un coefficient $\lambda = 0.0001$. Cette pénalité augmente de façon non linéaire avec la taille de la position.
-    \item \textbf{Écrêtage (Clipping)} : La récompense est contrainte dans l'intervalle $[-10, 10]$ pour stabiliser l'apprentissage du modèle A2C.
-\end{itemize}
-
-\paragraph{Fonctions de Loss}\mbox{} \\
-
-L'apprentissage de l'acteur repose sur l'avantage :
-\[
-A_t = R_t - V(s_t),
-\]
-où \(R_t\) représente le retour observé et \(V(s_t)\) la valeur estimée par
-le critique. La perte de l'acteur s'écrit :
-\[
-\mathcal{L}_{actor} =
--\log \pi_\theta(a_t \mid s_t)\, A_t
-- \beta \, \mathcal{H}\big(\pi_\theta(\cdot \mid s_t)\big),
-\]
-avec \(\beta\) le coefficient d'entropie et \(\mathcal{H}\) l'entropie de la
-politique. Le terme d'entropie évite que la politique devienne trop vite
-déterministe. Un coefficient plus élevé
-favorise l'exploration, tandis qu'un coefficient plus faible pousse l'agent
-à exploiter davantage les stratégies déjà apprises.
-
-La perte du critique est une erreur quadratique moyenne entre la valeur
-prédite et le retour observé :
-\[
-\mathcal{L}_{critic} = \big(R_t - V(s_t)\big)^2.
-\]
-
+Acteur et critique partageant un tronc commun, mise à
+jour synchrone par avantage estimé. Variante
+permettant de comparer une approche \textit{policy-based}
+au DQN \textit{value-based}.
 
 \paragraph{PPO (Proximal Policy Optimization).}
 L'agent PPO est formulé comme un \textbf{market maker
@@ -813,17 +612,7 @@ diversité des trajectoires.
 Les métriques suivies par épisode sont :
 récompense totale, loss moyenne épisode, nombre de trades,
 inventaire moyen (valeur absolue), PnL réalisé et epsilon.
-\subsection{Validation manuelle}
 
-Des scripts \texttt{test\_dqn\_manual.py} et
-\texttt{test\_sma\_manual.py} vérifient que :
-\begin{itemize}[leftmargin=1.2cm]
-    \item BUY est sélectionné dans les contextes attendus ;
-    \item SELL est bloqué quand l'inventaire est nul
-          (\textit{inventory guard}) ;
-    \item la SMA est calculée correctement sur la
-          fenêtre glissante.
-\end{itemize}
 % ===============================================================
 \section{Résultats et discussion}
 \label{sec:resultats}
@@ -845,7 +634,119 @@ HFT extrême).
 \subsubsection{Advantage Actor-Critic (A2C)}
 \label{sec:a2c}
 
+\paragraph{Principe de l'algorithme}\mbox{} \\
 
+L'agent \textit{Advantage Actor-Critic} (A2C) combine deux réseaux de neurones :
+un \textbf{acteur} qui choisit l'action à exécuter, et un \textbf{critique}
+qui estime la valeur de l'état courant. L'objectif de l'acteur est de
+maximiser la récompense attendue, tandis que le critique apprend à prédire
+la valeur du retour observé afin de réduire la variance de l'apprentissage.
+
+Dans notre implémentation, l'espace d'actions est discret et contient trois
+actions possibles :
+\[
+\mathcal{A} = \{\text{HOLD}, \text{BUY}, \text{SELL}\}.
+\]
+L'agent reçoit à chaque pas de temps un état de dimension 121, construit à
+partir des dernières bougies de volume et de l'inventaire courant.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{figures/Advantage-Actor-Critic-A2C-architecture.png}
+\caption{Principe général de l'architecture Actor-Critic utilisée pour A2C.}
+\label{fig:a2c_architecture}
+\end{figure}
+
+\paragraph{Représentation de l'état} \mbox{} \\
+
+L'observation fournie à l'agent est composée de quatre blocs de 30 valeurs
+normalisées, auxquels s'ajoute une valeur scalaire correspondant à
+l'inventaire :
+\[
+s_t = \big[\text{close}_{t-29:t},\ \text{high}_{t-29:t},\ \text{low}_{t-29:t},\ \text{volume}_{t-29:t},\ \text{inventory}_t\big].
+\]
+Chaque bloc est normalisé par rapport à la dernière clôture de la fenêtre,
+ce qui permet de rendre l'apprentissage plus stable et plus robuste aux
+variations d'échelle du prix.
+
+\paragraph{Fonction de récompense}\mbox{} \\
+
+La récompense est calculée à chaque pas de temps en fonction de la variation de la valeur du portefeuille, tout en intégrant une gestion du risque liée à l'exposition. 
+
+\subparagraph{1. Valeur du portefeuille}\mbox{} \\
+La valeur totale du portefeuille à l'instant $t$, notée $V_t$, est définie par la somme des liquidités et de la valeur de l'inventaire au prix de clôture :
+\[
+V_t = \text{cash}_t + (I_t \cdot P_t)
+\]
+où :
+\begin{itemize}
+    \item $\text{cash}_t$ représente les liquidités accumulées (achats et ventes).
+    \item $I_t$ est l'inventaire, soit le nombre de contrats détenus.
+    \item $P_t$ est le prix de clôture de la bougie de volume actuelle.
+\end{itemize}
+
+\subparagraph{2. Calcul de la récompense instantanée}\mbox{} \\
+La récompense $r_t$ repose sur le profit ou la perte latent (\textit{Step PnL}) ajusté par une pénalité d'inventaire quadratique :
+\[
+r_t = \text{clip}\left( (V_t - V_{t-1}) - \lambda I_t^2 P_t, \, -10, \, 10 \right)
+\]
+\begin{itemize}
+    \item \textbf{Variation de PnL} ($V_t - V_{t-1}$) : L'agent est récompensé si la valeur totale de ses actifs augmente.
+    \item \textbf{Pénalité d'inventaire} ($\lambda I_t^2 P_t$) : Pour limiter le risque directionnel, une pénalité est appliquée avec un coefficient $\lambda = 0.0001$. Cette pénalité augmente de façon non linéaire avec la taille de la position.
+    \item \textbf{Écrêtage (Clipping)} : La récompense est contrainte dans l'intervalle $[-10, 10]$ pour stabiliser l'apprentissage du modèle A2C.
+\end{itemize}
+
+\subparagraph{3. Conditions d'exécution}\mbox{} \\
+La mise à jour de $V_t$ dépend de l'exécution des ordres \textit{limit} placés par l'agent :
+\begin{itemize}
+    \item Un \textbf{achat} est validé si le prix bas de la bougie atteint le prix bid de l'agent : $P_{\text{low}} \le P_{\text{bid\_agent}}$.
+    \item Une \textbf{vente} est validée si le prix haut de la bougie atteint le prix ask de l'agent : $P_{\text{high}} \ge P_{\text{ask\_agent}}$.
+\end{itemize}
+\paragraph{Perte d'apprentissage}\mbox{} \\
+
+L'apprentissage de l'acteur repose sur l'avantage :
+\[
+A_t = R_t - V(s_t),
+\]
+où \(R_t\) représente le retour observé et \(V(s_t)\) la valeur estimée par
+le critique. La perte de l'acteur s'écrit :
+\[
+\mathcal{L}_{actor} =
+-\log \pi_\theta(a_t \mid s_t)\, A_t
+- \beta \, \mathcal{H}\big(\pi_\theta(\cdot \mid s_t)\big),
+\]
+avec \(\beta\) le coefficient d'entropie et \(\mathcal{H}\) l'entropie de la
+politique. Le terme d'entropie évite que la politique devienne trop vite
+déterministe.
+
+La perte du critique est une erreur quadratique moyenne entre la valeur
+prédite et le retour observé :
+\[
+\mathcal{L}_{critic} = \big(R_t - V(s_t)\big)^2.
+\]
+
+\paragraph{Coefficient d'entropie}\mbox{} \\
+
+Le coefficient d'entropie n'est pas fixé dans l'absolu : il peut être
+constant ou décroître au cours de l'entraînement. Un coefficient plus élevé
+favorise l'exploration, tandis qu'un coefficient plus faible pousse l'agent
+à exploiter davantage les stratégies déjà apprises.
+
+Dans notre cas, une décroissance progressive du coefficient d'entropie peut
+être utilisée pour encourager l'exploration au début, puis stabiliser la
+politique sur la fin de l'entraînement.
+
+\paragraph{Architecture du modèle}\mbox{} \\
+
+L'acteur et le critique utilisent des réseaux multicouches entièrement
+connectés. L'acteur produit des logits pour les trois actions possibles,
+puis une loi de probabilité catégorielle est construite à partir de ces logits.
+L'action est ensuite échantillonnée pendant l'entraînement et choisie de
+manière gloutonne lors de l'inférence.
+
+Le critique estime une valeur scalaire à partir de l'état courant. Cette
+estimation sert à calculer l'avantage et à guider la mise à jour des poids
+du réseau de politique.
 
 \paragraph{Résultats d'entraînement}\mbox{} \\
 
@@ -1064,8 +965,7 @@ sa politique au fil de l'entraînement.
 objectifs de performance, l'intégration Binance est
 stable, les stratégies par règles donnent une
 \textit{baseline} interprétable et les agents RL
-convergent visiblement (figures \ref{fig:a2c},
-\ref{fig:ppo_train}, \ref{fig:dreamer}).
+convergent sur les données d'entraînement.
 
 \paragraph{Limites observées.} Les agents RL restent
 sensibles à la qualité du \textit{reward shaping} et
