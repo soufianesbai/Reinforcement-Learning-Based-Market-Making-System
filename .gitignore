@@ -27,6 +27,12 @@ __pycache__/
 *.pyo
 *.pyd
 
+# Trained model weights (too large for git — keep locally)
+*.pth
+*.pt
+*.h5
+*.ckpt
+
 # OS / editor
 .DS_Store
 Thumbs.db
