@@ -34,6 +34,7 @@ process_state = {
     "agent_name": "Mean Reversion",
     "last_error": None,
     "started_at": None,
+    "agent_log_offset": 0,  # byte offset in agent log when current agent started
 }
 
 perf_state = {
@@ -52,6 +53,9 @@ chart_state = {
     "symbol": None,
 }
 
+# Inventory tracked per product across session switches
+inventory_per_product: dict = {}
+
 
 def strip_ansi(line: str) -> str:
     return ANSI_RE.sub("", line)
@@ -65,6 +69,7 @@ def strategy_from_agent(agent_name: str) -> str:
         "SMA": "sma",
         "Random": "random",
         "A2C": "a2c",
+        "SAC": "sac",
         "DQN": "dqn",
         "PPO": "ppo",
     }
@@ -87,6 +92,43 @@ def kill_process_group(proc: subprocess.Popen | None):
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
     except ProcessLookupError:
         pass
+
+
+def kill_stale_agents():
+    """Kill any lingering agents.main processes not tracked by process_state."""
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "agents.main"],
+            capture_output=True, text=True
+        )
+        pids = []
+        for pid_str in result.stdout.strip().splitlines():
+            try:
+                pid = int(pid_str)
+                os.kill(pid, signal.SIGTERM)
+                pids.append(pid)
+            except (ValueError, ProcessLookupError):
+                pass
+        if pids:
+            deadline = time.time() + 2
+            while pids and time.time() < deadline:
+                time.sleep(0.05)
+                pids = [p for p in pids if _pid_alive(p)]
+            for pid in pids:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+    except Exception:
+        pass
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
 
 
 def tail_file(path: Path, line_limit: int = 80) -> list[str]:
@@ -163,22 +205,21 @@ def read_market_state(metrics=None):
 
             with state_lock:
                 chart_state["tick"] += 1
-            current = chart_state["current"]
-            if current is None:
-                chart_state["current"] = {
-                    "o": round(mid, 2),
-                    "h": round(mid, 2),
-                    "l": round(mid, 2),
-                    "c": round(mid, 2),
-                    "t": datetime.now().strftime("%H:%M:%S"),
-                    "v": int(abs(payload.get("spread", 1)) * 10 + 100),
-                }
-            else:
-                current["h"] = round(max(current["h"], mid), 2)
-                current["l"] = round(min(current["l"], mid), 2)
-                current["c"] = round(mid, 2)
+                current = chart_state["current"]
+                if current is None:
+                    chart_state["current"] = {
+                        "o": round(mid, 2),
+                        "h": round(mid, 2),
+                        "l": round(mid, 2),
+                        "c": round(mid, 2),
+                        "t": datetime.now().strftime("%H:%M:%S"),
+                        "v": int(abs(payload.get("spread", 1)) * 10 + 100),
+                    }
+                else:
+                    current["h"] = round(max(current["h"], mid), 2)
+                    current["l"] = round(min(current["l"], mid), 2)
+                    current["c"] = round(mid, 2)
 
-            with state_lock:
                 if chart_state["tick"] % chart_state["window"] == 0 and chart_state["current"] is not None:
                     chart_state["candles"].append(chart_state["current"])
                     if len(chart_state["candles"]) > 36:
@@ -205,43 +246,46 @@ def read_trade_log(limit: int = 25):
     pending_qty = None
     pending_price = None
 
-    with AGENT_LOG_FILE.open("r", encoding="utf-8", errors="ignore") as f:
-        for raw in f:
-            line = strip_ansi(raw).strip()
-            order_match = ORDER_RE.search(line)
-            if order_match:
-                pending_time = order_match.group(1)
-                pending_action = order_match.group(2).title()
+    with AGENT_LOG_FILE.open("rb") as f:
+        f.seek(0, 2)
+        size = f.tell()
+        f.seek(max(0, size - 65536))
+        session_text = f.read().decode("utf-8", errors="ignore")
+
+    for raw in session_text.splitlines():
+        line = strip_ansi(raw).strip()
+        order_match = ORDER_RE.search(line)
+        if order_match:
+            pending_time = order_match.group(1)
+            pending_action = order_match.group(2).title()
+            pending_qty = None
+            pending_price = None
+            continue
+
+        if pending_action:
+            qty_match = QTY_RE.search(line)
+            if qty_match and pending_qty is None:
+                pending_qty = float(qty_match.group(1))
+                continue
+            price_match = UNIT_PRICE_RE.search(line)
+            if price_match and pending_price is None:
+                pending_price = float(price_match.group(1))
+                continue
+            total_match = TOTAL_RE.search(line)
+            if total_match:
+                amount = float(total_match.group(1))
+                signed = -amount if pending_action == "Buy" else amount
+                actions.append({
+                    "time": pending_time or datetime.now().strftime("%H:%M:%S"),
+                    "action": pending_action,
+                    "result": round(signed, 2),
+                    "qty": pending_qty,
+                    "price": pending_price,
+                })
+                pending_action = None
+                pending_time = None
                 pending_qty = None
                 pending_price = None
-                continue
-
-            if pending_action:
-                qty_match = QTY_RE.search(line)
-                if qty_match and pending_qty is None:
-                    pending_qty = float(qty_match.group(1))
-                    continue
-                price_match = UNIT_PRICE_RE.search(line)
-                if price_match and pending_price is None:
-                    pending_price = float(price_match.group(1))
-                    continue
-                total_match = TOTAL_RE.search(line)
-                if total_match:
-                    amount = float(total_match.group(1))
-                    signed = -amount if pending_action == "Buy" else amount
-                    actions.append(
-                        {
-                            "time": pending_time or datetime.now().strftime("%H:%M:%S"),
-                            "action": pending_action,
-                            "result": round(signed, 2),
-                            "qty": pending_qty,
-                            "price": pending_price,
-                        }
-                    )
-                    pending_action = None
-                    pending_time = None
-                    pending_qty = None
-                    pending_price = None
 
     dedup = []
     for row in actions:
@@ -251,9 +295,10 @@ def read_trade_log(limit: int = 25):
 
 
 def read_chart_payload():
-    candles = list(chart_state["candles"])
-    if chart_state["current"] is not None:
-        candles = candles + [chart_state["current"]]
+    with state_lock:
+        candles = list(chart_state["candles"])
+        if chart_state["current"] is not None:
+            candles = candles + [chart_state["current"]]
 
     recent_rows = read_trade_log(limit=10)
     markers = []
@@ -337,9 +382,10 @@ def read_snapshot():
         "sell_ratio": round((sells / total) * 100, 2) if total else 0.0,
     }
 
-    candles = list(chart_state["candles"])
-    if chart_state["current"] is not None:
-        candles = candles + [chart_state["current"]]
+    with state_lock:
+        candles = list(chart_state["candles"])
+        if chart_state["current"] is not None:
+            candles = candles + [chart_state["current"]]
     markers = [
         {"label": f"{r['action']} Order", "side": r["action"].lower(), "time": r["time"]}
         for r in all_trades[-6:]
@@ -391,15 +437,17 @@ def read_runtime_metrics():
     if not AGENT_LOG_FILE.exists():
         return {"cash": None, "inventory": None, "trade_count": 0}
 
+    offset = process_state.get("agent_log_offset", 0)
     with AGENT_LOG_FILE.open("rb") as f:
-        # Count trades with a full scan (unavoidable), but read tail for cash/inventory
-        content = f.read()
+        full_content = f.read()
 
-    text = content.decode("utf-8", errors="ignore")
+    # Count trades only from current agent's portion
+    current_content = full_content[offset:]
+    text = current_content.decode("utf-8", errors="ignore")
     trades = len(ORDER_RE.findall(text))
 
-    # Only scan last 8 KB for cash/inventory (always in recent lines)
-    tail = content[-8192:].decode("utf-8", errors="ignore")
+    # Only scan last 8 KB of current agent's log for cash/inventory
+    tail = current_content[-8192:].decode("utf-8", errors="ignore")
     for line in tail.splitlines():
         line = strip_ansi(line)
         m = CASH_RE.search(line)
@@ -409,10 +457,16 @@ def read_runtime_metrics():
         if m:
             latest_inventory = float(m.group(1))
 
+    # Persist inventory per product
+    current_product = process_state["product"]
+    if latest_inventory is not None:
+        inventory_per_product[current_product] = latest_inventory
+
     return {
         "cash": latest_cash,
-        "inventory": latest_inventory,
+        "inventory": inventory_per_product.get(current_product),
         "trade_count": trades,
+        "inventory_per_product": dict(inventory_per_product),
     }
 
 
@@ -442,6 +496,13 @@ def start_agent(agent_name: str, product: str):
             return
 
         DATA_DIR.mkdir(parents=True, exist_ok=True)
+        # Record log offset before the new agent starts writing
+        offset = AGENT_LOG_FILE.stat().st_size if AGENT_LOG_FILE.exists() else 0
+        process_state["agent_log_offset"] = offset
+        # Initialize inventory to 0 for this product if never seen before
+        if product not in inventory_per_product:
+            inventory_per_product[product] = 0.0
+
         agent_log = AGENT_LOG_FILE.open("a", encoding="utf-8")
 
         process_state["agent"] = subprocess.Popen(
@@ -488,6 +549,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
     def do_GET(self):
+        try:
+            self._do_GET_inner()
+        except Exception as exc:
+            try:
+                self._send_json({"error": str(exc)}, status=500)
+            except Exception:
+                pass
+
+    def _do_GET_inner(self):
         parsed = urlparse(self.path)
         path = parsed.path
         # Endpoint pour vérifier si le reset est en cours
@@ -631,6 +701,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 product = payload.get("product", "SOLUSDT")
                 agent_name = payload.get("agent", "Mean Reversion")
 
+                if agent_name == "DQN":
+                    self._send_json({"ok": False, "message": "DQN : modèle non trouvé. Placer le fichier models/dqn_agent.pth pour activer cet agent."}, status=400)
+                    return
+                if agent_name == "PPO":
+                    self._send_json({"ok": False, "message": "PPO : TensorFlow non disponible sur Python 3.14."}, status=400)
+                    return
+
                 with state_lock:
                     process_state["product"] = product
                     process_state["agent_name"] = agent_name
@@ -644,6 +721,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         kill_process_group(process_state["agent"])
                         process_state["agent"] = None
 
+                kill_stale_agents()
+
+                with state_lock:
                     chart_state["candles"] = []
                     chart_state["current"] = None
                     chart_state["tick"] = 0

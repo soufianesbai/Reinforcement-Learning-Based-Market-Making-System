@@ -501,6 +501,56 @@ select {
   color: var(--text-sub);
 }
 
+.portfolio-modal-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 999;
+  align-items: center;
+  justify-content: center;
+}
+.portfolio-modal {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px 28px;
+  min-width: 480px;
+  max-width: 90vw;
+}
+.portfolio-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.portfolio-modal-header h2 { font-size: 1rem; }
+.portfolio-modal-close {
+  background: none; border: none;
+  color: var(--text-sub); font-size: 1.1rem;
+  cursor: pointer; padding: 4px 8px;
+}
+.portfolio-modal-close:hover { color: var(--text); }
+.portfolio-current-tag {
+  font-size: 0.7rem; color: #4aa3ff;
+  background: rgba(74,163,255,0.12);
+  padding: 1px 6px; border-radius: 4px;
+  margin-left: 6px;
+}
+.portfolio-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+.portfolio-table th,
+.portfolio-table td {
+  padding: 7px 8px;
+  text-align: left;
+  border-bottom: 1px solid rgba(159, 179, 209, 0.12);
+}
+.portfolio-table th { color: var(--text-sub); font-weight: 600; }
+.portfolio-row-active td { color: #4aa3ff; font-weight: 600; }
+.portfolio-empty { color: var(--text-sub); font-style: italic; padding: 10px 8px; }
+
 .log-table {
   width: 100%;
   border-collapse: collapse;

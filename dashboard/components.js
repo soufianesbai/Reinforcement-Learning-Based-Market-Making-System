@@ -69,6 +69,22 @@ window.MarketMindComponents = (function () {
     `;
   }
 
+  function portfolioCard() {
+    return `
+      <section class="card portfolio-card">
+        <h2>Portfolio</h2>
+        <table class="portfolio-table">
+          <thead>
+            <tr><th>Asset</th><th>Qty</th><th>Mid Price</th><th>Value (USDT)</th></tr>
+          </thead>
+          <tbody id="portfolio-body">
+            <tr><td colspan="4" class="portfolio-empty">No open positions</td></tr>
+          </tbody>
+        </table>
+      </section>
+    `;
+  }
+
   function orderBookCard(data) {
     // Robustesse : valeurs par défaut si null/NaN
     const askVal = (data.ask != null && !isNaN(data.ask)) ? data.ask.toFixed(2) : '--';
@@ -135,6 +151,8 @@ window.MarketMindComponents = (function () {
           <select id="agent-select">
             ${agents.map((a) => {
               const selected = a === "Mean Reversion" ? "selected" : "";
+              if (a === "DQN") return `<option disabled title="Modèle non trouvé — placer models/dqn_agent.pth">DQN (modèle manquant)</option>`;
+              if (a === "PPO") return `<option disabled title="TensorFlow non disponible sur Python 3.14">PPO (TF indisponible)</option>`;
               return `<option ${selected}>${a}</option>`;
             }).join("")}
           </select>
@@ -175,6 +193,7 @@ window.MarketMindComponents = (function () {
   return {
     topbar,
     statCards,
+    portfolioCard,
     orderBookCard,
     chartCard,
     rightPanel,
