@@ -27,8 +27,8 @@ ORDER_RE = re.compile(r"\[(\d{2}:\d{2}:\d{2})\].*?Order placed - (BUY|SELL)")
 TOTAL_RE = re.compile(r"Total:\s*\$(\d+(?:\.\d+)?)")
 UNIT_PRICE_RE = re.compile(r"Unit Price:\s*\$(\d+(?:\.\d+)?)")
 QTY_RE = re.compile(r"Quantity:\s*(\d+(?:\.\d+)?)")
-CASH_RE = re.compile(r"Cash:\s*\$(\d+(?:\.\d+)?)")
-INVENTORY_RE = re.compile(r"Inventory:\s*(\d+(?:\.\d+)?)") 
+CASH_RE = re.compile(r"\s*Cash:\s*\$(\d+(?:\.\d+)?)")
+INVENTORY_RE = re.compile(r"\s*Inventory:\s*(\d+(?:\.\d+)?)") 
 
 state_lock = threading.Lock()
 process_state = {

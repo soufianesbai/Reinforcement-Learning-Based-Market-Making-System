@@ -43,19 +43,20 @@ class TradingAgent:
         self.total_trades = 0
         self.last_order_id = None
         
-        # Test connectivity
-        if not self.binance.test_connectivity():
-            raise ConnectionError("Failed to connect to Binance testnet. Check your internet connection.")
+        # Test connectivity (optional - may fail in offline/demo mode)
+        if self.binance.test_connectivity():
+            print(f"Connected to Binance testnet")
+        else:
+            print(f"⚠️  Warning: Cannot connect to Binance testnet (running in demo/offline mode)")
         
-        print(f"Connected to Binance testnet")
-        
-        # Get initial USDT balance
+        # Get initial USDT balance (use default 10000 USDT if offline/demo)
         balance = self.binance.get_balance("USDT")
         if balance is not None:
             self.cash = balance
             print(f"Initial USDT balance: {self.cash:.2f}")
         else:
-            print("Could not retrieve balance")
+            self.cash = 10000.0  # Demo/offline default balance
+            print(f"Using demo balance: ${self.cash:.2f}")
         
         # Check if we already have inventory for this asset
         asset = self._extract_base_asset(self.symbol)
