@@ -236,12 +236,12 @@ Le client souhaite disposer d'une plateforme permettant :
 \subsection{Équipe et rôles}
 
 \begin{itemize}[leftmargin=1.2cm]
-    \item \textbf{Bella Taleb El Alem} : agent PPO
-    \item \textbf{Yani Haouchine} : agent Dreamer~v3
-    \item \textbf{Ihab Jaouad} : agent DQN
-    \item \textbf{Anas Benbaki} : agent A2C
-    \item \textbf{Mohamed Aziz Migaou} : agent Dreamer~v3 moteur de carnet d'ordres C++
-    \item \textbf{Soufiane Sbai} : dashboard + agent SAC
+    \item \textbf{Bella Taleb El Alem} : Agent PPO
+    \item \textbf{Yani Haouchine} : Agent Dreamer~v3
+    \item \textbf{Ihab Jaouad} : Agent DQN
+    \item \textbf{Anas Benbaki} : Agent A2C
+    \item \textbf{Mohamed Aziz Migaou} :  3 Stratégies à Régles + Moteur de Carnet d'Ordres C++ 
+    \item \textbf{Soufiane Sbai} : Dashboard + Agent SAC
 \end{itemize}
 
 \subsection{Méthodologie}
@@ -1002,17 +1002,6 @@ itérations, sauvegarde du modèle à chaque époque,
 suivi des actions (\textit{hold/buy/sell}), du PnL
 \textit{mark-to-market} et du \textit{Sharpe ratio}
 glissant.
-\subsubsection{Protocole DQN détaillé}
-
-Pour le DQN, les trades sont d'abord transformés
-en \textbf{volume bars} (seuil 1000 SOL), produisant
-5~653 bougies. Chaque épisode exécute au plus 200 pas,
-sur un point de départ aléatoire pour améliorer la
-diversité des trajectoires.
-
-Les métriques suivies par épisode sont :
-récompense totale, loss moyenne épisode, nombre de trades,
-inventaire moyen (valeur absolue), PnL réalisé et epsilon.
 
 % ===============================================================
 \section{Résultats et discussion}
