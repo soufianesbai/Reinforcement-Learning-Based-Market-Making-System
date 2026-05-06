@@ -1,0 +1,60 @@
+\babel@toc {french}{}\relax 
+\contentsline {section}{\numberline {1}Introduction}{3}{section.1}%
+\contentsline {section}{\numberline {2}Besoins du client}{3}{section.2}%
+\contentsline {section}{\numberline {3}Cahier des charges}{3}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Exigences fonctionnelles}{3}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Exigences non fonctionnelles}{3}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Périmètre}{4}{subsection.3.3}%
+\contentsline {paragraph}{Inclus.}{4}{section*.2}%
+\contentsline {paragraph}{Exclus.}{4}{section*.3}%
+\contentsline {section}{\numberline {4}Organisation du projet}{4}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Équipe et rôles}{4}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Méthodologie}{4}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}Outils}{4}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}Arborescence}{4}{subsection.4.4}%
+\contentsline {section}{\numberline {5}Diagramme de Gantt}{5}{section.5}%
+\contentsline {section}{\numberline {6}Techniques mises en œuvre}{5}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Moteur de carnet d'ordres}{5}{subsection.6.1}%
+\contentsline {subsubsection}{\numberline {6.1.1}Structures de données}{5}{subsubsection.6.1.1}%
+\contentsline {paragraph}{Complexités obtenues}{5}{section*.5}%
+\contentsline {subsubsection}{\numberline {6.1.2}Algorithme de matching}{5}{subsubsection.6.1.2}%
+\contentsline {subsection}{\numberline {6.2}Données de marché temps réel}{5}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Agents de trading}{5}{subsection.6.3}%
+\contentsline {subsubsection}{\numberline {6.3.1}Stratégies par règles}{5}{subsubsection.6.3.1}%
+\contentsline {subsubsection}{\numberline {6.3.2}Apprentissage par renforcement}{6}{subsubsection.6.3.2}%
+\contentsline {paragraph}{DQN (Deep Q-Network).}{6}{section*.6}%
+\contentsline {paragraph}{A2C (Advantage Actor-Critic).}{6}{section*.7}%
+\contentsline {paragraph}{PPO (Proximal Policy Optimization).}{6}{section*.8}%
+\contentsline {paragraph}{Dreamer v3 (model-based).}{6}{section*.9}%
+\contentsline {subsection}{\numberline {6.4}Infrastructure d'entraînement}{6}{subsection.6.4}%
+\contentsline {subsection}{\numberline {6.5}Tableau de bord}{6}{subsection.6.5}%
+\contentsline {section}{\numberline {7}Expérimentations}{6}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Benchmarks du moteur}{6}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}Entraînements RL}{7}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}Validation manuelle}{7}{subsection.7.3}%
+\contentsline {section}{\numberline {8}Résultats et discussion}{7}{section.8}%
+\contentsline {subsection}{\numberline {8.1}Performance du moteur}{7}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}Apprentissage des agents RL}{8}{subsection.8.2}%
+\contentsline {subsubsection}{\numberline {8.2.1}A2C}{8}{subsubsection.8.2.1}%
+\contentsline {subsubsection}{\numberline {8.2.2}PPO}{9}{subsubsection.8.2.2}%
+\contentsline {subsubsection}{\numberline {8.2.3}Dreamer v3}{10}{subsubsection.8.2.3}%
+\contentsline {subsection}{\numberline {8.3}Comparaison des stratégies}{10}{subsection.8.3}%
+\contentsline {subsection}{\numberline {8.4}Discussion}{10}{subsection.8.4}%
+\contentsline {paragraph}{Ce qui fonctionne.}{10}{section*.15}%
+\contentsline {paragraph}{Limites observées.}{11}{section*.16}%
+\contentsline {paragraph}{Pistes d'amélioration.}{11}{section*.17}%
+\contentsline {section}{\numberline {9}Manuel d'utilisation}{11}{section.9}%
+\contentsline {subsection}{\numberline {9.1}Pré-requis}{11}{subsection.9.1}%
+\contentsline {subsection}{\numberline {9.2}Compilation}{11}{subsection.9.2}%
+\contentsline {subsection}{\numberline {9.3}Lancement du moteur et des données live}{11}{subsection.9.3}%
+\contentsline {subsection}{\numberline {9.4}Lancement d'un agent}{11}{subsection.9.4}%
+\contentsline {subsection}{\numberline {9.5}Entraînement des agents RL}{12}{subsection.9.5}%
+\contentsline {subsection}{\numberline {9.6}Tableau de bord}{12}{subsection.9.6}%
+\contentsline {subsection}{\numberline {9.7}Configuration Binance testnet}{12}{subsection.9.7}%
+\contentsline {section}{\numberline {10}Maintenance}{12}{section.10}%
+\contentsline {subsection}{\numberline {10.1}Mise à jour des dépendances}{12}{subsection.10.1}%
+\contentsline {subsection}{\numberline {10.2}Ajout d'une nouvelle stratégie}{12}{subsection.10.2}%
+\contentsline {subsection}{\numberline {10.3}Ré-entraînement périodique}{12}{subsection.10.3}%
+\contentsline {subsection}{\numberline {10.4}Surveillance en production}{12}{subsection.10.4}%
+\contentsline {subsection}{\numberline {10.5}Tests de non-régression}{13}{subsection.10.5}%
+\contentsline {section}{\numberline {11}Conclusion}{13}{section.11}%

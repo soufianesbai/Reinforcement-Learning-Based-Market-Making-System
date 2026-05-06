@@ -8,15 +8,17 @@
 \usepackage[french]{babel}
 \usepackage{lmodern}
 \usepackage{graphicx}
+\graphicspath{{figures/}{rapport/figures/}}
+\PassOptionsToPackage{dvipsnames}{xcolor}
 \usepackage{xcolor}
-\usepackage{listings}
+\usepackage{colortbl}
+\definecolor{gold}{RGB}{218,165,32}
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{tabularx}
 \usepackage{amsmath,amssymb}
 \usepackage{tikz}
-\usetikzlibrary{shapes,arrows,positioning,fit,backgrounds}
-\usepackage{pgfgantt}
+\usetikzlibrary{shapes,arrows,positioning,fit,backgrounds,arrows.meta,calc}
 
 % ---------------------------------------------------------------
 % Thème Beamer
@@ -28,6 +30,8 @@
 
 \definecolor{enseirbblue}{RGB}{0,76,153}
 \definecolor{enseirbaccent}{RGB}{200,80,40}
+\definecolor{bidgreen}{RGB}{40,160,80}
+\definecolor{askred}{RGB}{200,60,50}
 \setbeamercolor{structure}{fg=enseirbblue}
 \setbeamercolor{title}{fg=white,bg=enseirbblue}
 \setbeamercolor{frametitle}{fg=white,bg=enseirbblue}
@@ -40,39 +44,10 @@
 \setbeamertemplate{itemize subitem}{\color{enseirbblue}--}
 
 % ---------------------------------------------------------------
-% Style code
-% ---------------------------------------------------------------
-\definecolor{codegray}{rgb}{0.95,0.95,0.95}
-\definecolor{codekw}{rgb}{0.13,0.29,0.53}
-\definecolor{codestr}{rgb}{0.45,0.45,0.45}
-\definecolor{codecmt}{rgb}{0.25,0.50,0.25}
-
-\lstset{
-    backgroundcolor=\color{codegray},
-    basicstyle=\ttfamily\scriptsize,
-    keywordstyle=\color{codekw}\bfseries,
-    stringstyle=\color{codestr},
-    commentstyle=\color{codecmt}\itshape,
-    breaklines=true,
-    frame=single,
-    showstringspaces=false,
-    tabsize=2,
-    extendedchars=true,
-    inputencoding=utf8,
-    literate=%
-        {é}{{\'e}}1 {è}{{\`e}}1 {ê}{{\^e}}1 {ë}{{\"e}}1
-        {É}{{\'E}}1 {È}{{\`E}}1 {Ê}{{\^E}}1 {Ë}{{\"E}}1
-        {à}{{\`a}}1 {â}{{\^a}}1 {À}{{\`A}}1 {Â}{{\^A}}1
-        {î}{{\^i}}1 {ï}{{\"i}}1 {ô}{{\^o}}1
-        {û}{{\^u}}1 {ü}{{\"u}}1 {ù}{{\`u}}1
-        {ç}{{\c c}}1 {Ç}{{\c C}}1
-}
-
-% ---------------------------------------------------------------
 % Page de titre
 % ---------------------------------------------------------------
 \title[Order Book Engine]{Order Book Engine}
-\subtitle{Moteur de carnet d'ordres haute performance \\ et agents de trading par apprentissage par renforcement}
+\subtitle{Carnet d'ordres haute performance \& agents de trading par RL}
 \author[Équipe PFA]{Équipe PFA -- 6 membres}
 \institute[ENSEIRB-MATMECA]{ENSEIRB-MATMECA \\ Projet de Fin d'Année}
 \date{\today}
@@ -81,700 +56,647 @@
 \begin{document}
 % ===============================================================
 
-% ===============================================================
-% PARTIE 1 -- Personne 1 : Introduction (slides 1 à 4)
-% ===============================================================
-
 % --- Slide 1 : Titre
 \begin{frame}
     \titlepage
 \end{frame}
 
-% --- Slide 2 : Plan
-\begin{frame}{Plan de la présentation}
+% --- Slide 2 : Plan (visuel et compact)
+\begin{frame}{Plan}
     \begin{columns}[T]
         \column{0.5\textwidth}
+        \textbf{\color{enseirbblue}Infrastructure}
         \begin{enumerate}
-            \item Introduction \& contexte
-            \item Besoins et cahier des charges
-            \item Organisation du projet
-            \item Architecture logicielle
-            \item Moteur de carnet d'ordres C++
-            \item Données de marché temps réel
+            \item Contexte \& objectifs
+            \item Architecture
+            \item Moteur C++
+            \item Données Binance
         \end{enumerate}
         \column{0.5\textwidth}
-        \begin{enumerate}\setcounter{enumi}{6}
+        \textbf{\color{enseirbblue}Stratégies}
+        \begin{enumerate}\setcounter{enumi}{4}
             \item Stratégies par règles
-            \item Tableau de bord
-            \item Agents par renforcement (DQN, A2C, PPO)
-            \item Dreamer v3 (model-based)
-            \item Comparaison \& résultats
-            \item Conclusion et perspectives
-        \end{enumerate}
-    \end{columns}
-\end{frame}
-
-% --- Slide 3 : Introduction & contexte
-\begin{frame}{Introduction \& contexte}
-    \begin{block}{Constat}
-        Les marchés financiers modernes reposent sur des \alert{moteurs de carnet d'ordres}
-        capables de traiter des centaines de milliers d'ordres par seconde,
-        avec des latences de l'ordre de la microseconde.
-    \end{block}
-
-    \vspace{0.3cm}
-    \textbf{Notre projet réunit deux briques complémentaires :}
-    \begin{itemize}
-        \item une \alert{infrastructure de marché} (matching engine + ingestion temps réel) ;
-        \item une \alert{collection d'agents de trading} algorithmiques, depuis les
-              heuristiques classiques jusqu'aux méthodes d'apprentissage par renforcement modernes.
-    \end{itemize}
-
-    \vspace{0.3cm}
-    \begin{block}{Objectif}
-        Construire une plateforme de bout en bout permettant de \textbf{simuler},
-        \textbf{entraîner} et \textbf{évaluer} des stratégies de trading sur des
-        données crypto réelles (Binance).
-    \end{block}
-\end{frame}
-
-% --- Slide 4 : Besoins client et cahier des charges
-\begin{frame}{Besoins du client \& cahier des charges}
-    \begin{columns}[T]
-        \column{0.55\textwidth}
-        \textbf{Besoins exprimés}
-        \begin{itemize}
-            \item Simuler un carnet d'ordres fidèle aux conventions de marché.
-            \item Récupérer en temps réel les flux Binance.
-            \item Exécuter des stratégies algorithmiques (règles + RL).
-            \item Visualiser marché et performances.
-            \item Mesurer la performance brute du moteur.
-        \end{itemize}
-
-        \column{0.45\textwidth}
-        \textbf{Exigences clés}
-        \begin{itemize}
-            \item \textbf{F1--F2} : matching prix-temps, 5 types d'ordres
-              (\texttt{GTC}, \texttt{Market}, \texttt{IOC}, \texttt{FOK}, \texttt{GFD}).
-            \item \textbf{F3} : intégration API Binance.
-            \item \textbf{F4--F5} : agents enfichables + dashboard.
-            \item \textbf{NF1} : $\geq 100$\,k ops/s, latence $\sim \mu$s.
-            \item \textbf{NF2--NF4} : portable, maintenable, reproductible.
-        \end{itemize}
-    \end{columns}
-
-    \vspace{0.3cm}
-    \begin{block}{Périmètre}
-        \textbf{Inclus} : moteur, ingestion Binance, agents règles \& RL, dashboard, benchmarks. \quad
-        \textbf{Exclus} : trading réel, conformité réglementaire, FPGA.
-    \end{block}
-\end{frame}
-
-% ===============================================================
-% PARTIE 2 -- Personne 2 : Organisation (slides 5 à 8)
-% ===============================================================
-
-% --- Slide 5 : Équipe et rôles
-\begin{frame}{Organisation de l'équipe}
-    \begin{block}{Équipe : 6 développeurs}
-        Répartition par pôle technique, avec revues croisées sur Git.
-    \end{block}
-
-    \begin{columns}[T]
-        \column{0.5\textwidth}
-        \textbf{Pôle infrastructure}
-        \begin{itemize}
-            \item Moteur de matching C++
-            \item Tests \& benchmarks
-            \item Ingestion Binance (libcurl + JSON)
-        \end{itemize}
-
-        \column{0.5\textwidth}
-        \textbf{Pôle stratégie}
-        \begin{itemize}
-            \item Stratégies par règles (Mean Reversion, RSI, Bollinger)
-            \item Agents RL (DQN, A2C, PPO)
-            \item Agent model-based (Dreamer v3)
-            \item Dashboard \& visualisation
-        \end{itemize}
-    \end{columns}
-
-    \vspace{0.3cm}
-    \begin{block}{Coordination}
-        Branches \textit{feature} sur Git, intégration sur \texttt{master},
-        revues de code croisées, benchmarks de non-régression à chaque merge.
-    \end{block}
-\end{frame}
-
-% --- Slide 6 : Méthodologie et outils
-\begin{frame}{Méthodologie et outils}
-    \begin{columns}[T]
-        \column{0.5\textwidth}
-        \textbf{Méthodologie itérative}
-        \begin{enumerate}
-            \item Moteur de matching + tests
-            \item Ingestion données réelles
-            \item Stratégies par règles
+            \item Dashboard
             \item Agents RL (DQN, A2C, PPO)
             \item Dreamer v3
-            \item Dashboard \& rapport
+            \item Résultats \& conclusion
         \end{enumerate}
-        Chaque itération validée par benchmarks de performance.
-
-        \column{0.5\textwidth}
-        \textbf{Outils techniques}
-        \begin{itemize}
-            \item \textbf{Versionnage} : Git
-            \item \textbf{Build} : CMake 3.10+, GCC/Clang
-            \item \textbf{Dépendances C++} :
-              \texttt{libcurl 8.4.0}, \texttt{nlohmann/json 3.11.3}
-              (via \texttt{FetchContent})
-            \item \textbf{Python} : PyTorch (CUDA), NumPy, Matplotlib
-            \item \textbf{Dashboard} : HTML/CSS/JS + serveur Python
-        \end{itemize}
     \end{columns}
 \end{frame}
 
-% --- Slide 7 : Architecture logicielle
+% ===============================================================
+% PARTIE 1 -- Contexte
+% ===============================================================
+
+% --- Slide 3 : Contexte
+\begin{frame}{Le défi des marchés modernes}
+    \begin{columns}[c]
+        \column{0.55\textwidth}
+        \begin{itemize}
+            \item \alert{$10^5$ ordres/s}
+            \item Latence \alert{$\sim$ microseconde}
+            \item Données \alert{temps réel}
+        \end{itemize}
+        \vspace{0.3cm}
+        \begin{block}{Notre projet}
+            Une plateforme \textbf{de bout en bout} pour simuler, entraîner et évaluer des stratégies sur données crypto.
+        \end{block}
+
+        \column{0.4\textwidth}
+        \centering
+        \includegraphics[width=0.55\textwidth]{binance_logo.png}\\[0.4cm]
+        \footnotesize Données live : Binance API
+    \end{columns}
+\end{frame}
+
+% --- Slide 4 : Cahier des charges
+\begin{frame}{Cahier des charges}
+    \begin{center}
+    \footnotesize
+    \begin{tabular}{p{2.2cm}p{6cm}p{3.5cm}}
+        \toprule
+        \textbf{Type} & \textbf{Exigence} & \textbf{Concrètement} \\
+        \midrule
+        \rowcolor{enseirbblue!10}
+        Fonctionnel & Matching prix-temps, 5 types d'ordres   & GTC, Market, IOC, FOK, GFD \\
+        Fonctionnel & Ingestion de données réelles            & API Binance \\
+        Fonctionnel & Agents enfichables + visualisation      & Dashboard web \\
+        \rowcolor{enseirbblue!10}
+        Non-fct.    & Performance haut débit                  & $\geq 10^5$ ops/s \\
+        Non-fct.    & Latence opérationnelle                  & $\sim$ microseconde \\
+        Non-fct.    & Reproductibilité                        & Seeds, checkpoints \\
+        \bottomrule
+    \end{tabular}
+    \end{center}
+
+    \vspace{0.4cm}
+    \begin{center}
+    \alert{\textbf{Hors périmètre :}} trading réel, conformité, FPGA.
+    \end{center}
+\end{frame}
+
+% ===============================================================
+% PARTIE 2 -- Architecture
+% ===============================================================
+
+% --- Slide 5 : Architecture logicielle
 \begin{frame}{Architecture logicielle}
     \centering
     \begin{tikzpicture}[
-        node distance=0.5cm and 0.6cm,
+        node distance=0.4cm and 0.7cm,
         every node/.style={font=\footnotesize},
-        box/.style={draw, rounded corners, fill=enseirbblue!15,
-                    minimum width=2.6cm, minimum height=0.8cm, align=center},
+        box/.style={draw, rounded corners, minimum width=2.4cm, minimum height=0.9cm, align=center},
         cppbox/.style={box, fill=enseirbblue!25},
         pybox/.style={box, fill=enseirbaccent!20},
         databox/.style={box, fill=gray!20},
         arr/.style={->, thick, >=stealth}
     ]
-        \node[cppbox] (engine) {Moteur C++ \\ \tiny matching engine};
-        \node[cppbox, right=of engine] (live) {LiveMarketData \\ \tiny libcurl + JSON};
-        \node[databox, right=of live] (binance) {API Binance \\ \tiny REST};
+        \node[databox] (binance) {\textbf{Binance API} \\ \tiny REST};
+        \node[cppbox, right=of binance] (live) {\textbf{LiveMarketData} \\ \tiny libcurl + JSON};
+        \node[cppbox, right=of live]    (engine) {\textbf{Moteur C++} \\ \tiny matching};
 
-        \node[databox, below=of engine] (jsonm) {market\_state.json};
-        \node[databox, below=of live] (jsono) {agent\_orders.json};
+        \node[databox, below=of live]   (jsonm) {\texttt{market\_state.json}};
+        \node[databox, below=of engine] (jsono) {\texttt{agent\_orders.json}};
 
-        \node[pybox, below=of jsonm] (agent) {Agent Python \\ \tiny stratégie};
-        \node[pybox, below=of jsono] (rl) {Agents RL \\ \tiny DQN/A2C/PPO/Dreamer};
-
-        \node[pybox, right=of rl] (dash) {Dashboard \\ \tiny HTML/JS};
+        \node[pybox, below=of jsonm] (agent) {\textbf{Agent Python}};
+        \node[pybox, below=of jsono] (rl)    {\textbf{RL / Dreamer}};
+        \node[pybox, left=of agent]  (dash)  {\textbf{Dashboard}};
 
         \draw[arr] (binance) -- (live);
         \draw[arr] (live) -- (engine);
         \draw[arr] (engine) -- (jsonm);
         \draw[arr] (jsonm) -- (agent);
-        \draw[arr] (agent) -- (jsono);
+        \draw[arr] (agent) -- (rl);
+        \draw[arr] (rl) -- (jsono);
         \draw[arr] (jsono) -- (engine);
-        \draw[arr] (rl) -- (agent);
-        \draw[arr] (jsonm.east) to[bend right=20] (dash.west);
+        \draw[arr] (jsonm) -- (dash);
     \end{tikzpicture}
 
     \vspace{0.3cm}
-    \begin{block}{Découplage par fichiers JSON}
-        Communication asynchrone C++ $\leftrightarrow$ Python via deux fichiers JSON :
-        chaque composant peut être relancé indépendamment.
-    \end{block}
+    \alert{Découplage par fichiers JSON} : composants C++ et Python relancés indépendamment.
 \end{frame}
 
 % ===============================================================
-% PARTIE 3 -- Personne 3 : Moteur C++ (slides 9 à 12)
+% PARTIE 3 -- Moteur C++
 % ===============================================================
 
-% --- Slide 9 : Structures de données
-\begin{frame}{Moteur C++ -- Structures de données}
-    \begin{columns}[T]
-        \column{0.55\textwidth}
-        \textbf{Représentation du carnet}
-        \begin{itemize}
-            \item Deux \texttt{std::map} séparées
-              \begin{itemize}
-                \item bids triés \alert{décroissants}
-                \item asks triés \alert{croissants}
-              \end{itemize}
-            \item Niveau de prix : \texttt{std::list<OrderPointer>} (FIFO)
-            \item \texttt{std::unordered\_map<OrderId, OrderEntry>} avec itérateur stocké
-        \end{itemize}
+% --- Slide 6 : Carnet d'ordres (visualisation)
+\begin{frame}{Carnet d'ordres}
+    \centering
+    \includegraphics[width=0.78\textwidth]{orderbook_viz.png}
 
-        \column{0.45\textwidth}
-        \textbf{Choix justifiés}
-        \begin{itemize}
-            \item Maps séparées $\Rightarrow$ deux ordres de tri opposés.
-            \item Itérateur stocké $\Rightarrow$ \alert{annulation $O(1)$}.
-            \item \texttt{shared\_ptr} : références multiples sans copie.
-            \item \texttt{Market} convertis en limit agressifs.
-        \end{itemize}
-    \end{columns}
-
-    \vspace{0.2cm}
-    \begin{center}
+    \vspace{-0.2cm}
     \footnotesize
-    \begin{tabular}{lll}
-        \toprule
-        \textbf{Opération} & \textbf{Complexité} & \textbf{Justification} \\
-        \midrule
-        Ajout d'ordre   & $O(\log n)$   & insertion dans la map \\
-        Annulation      & $O(1)$        & itérateur stocké \\
-        Modification    & $O(\log n)$   & cancel + insert \\
-        Matching        & $O(k \log n)$ & $k$ trades exécutés \\
-        \bottomrule
-    \end{tabular}
-    \end{center}
+    Bids = ordres d'achat (prix décroissants) \quad $|$ \quad Asks = ordres de vente (prix croissants)
 \end{frame}
 
-% --- Slide 10 : Algorithme de matching
-\begin{frame}{Algorithme de matching}
-    \begin{block}{Condition de match}
-        Un ordre s'exécute dès que : \quad
-        $\text{prix}_{\text{buy}} \geq \text{best ask} \quad$ ou $\quad
-        \text{prix}_{\text{sell}} \leq \text{best bid}$
-    \end{block}
-
-    \vspace{0.2cm}
-    \textbf{Priorité prix-temps}
-    \begin{enumerate}
-        \item \alert{Meilleur prix} d'abord (best bid pour les vendeurs, best ask pour les acheteurs).
-        \item Au sein d'un niveau : \alert{ordre d'arrivée} (FIFO).
-        \item Exécutions partielles autorisées (sauf \texttt{FillOrKill}).
-    \end{enumerate}
-
-    \vspace{0.3cm}
-    \begin{columns}[T]
-        \column{0.5\textwidth}
-        \textbf{Bids (achats)}
-        \begin{center}
-        \scriptsize
-        \begin{tabular}{cc}
-            \toprule
-            Prix & Quantité \\
-            \midrule
-            \alert{103.25} & 1234.56 \\
-            103.24 & 891.23 \\
-            103.23 & 2145.67 \\
-            \bottomrule
-        \end{tabular}
-        \end{center}
-
-        \column{0.5\textwidth}
-        \textbf{Asks (ventes)}
-        \begin{center}
-        \scriptsize
-        \begin{tabular}{cc}
-            \toprule
-            Prix & Quantité \\
-            \midrule
-            \alert{103.27} & 1567.89 \\
-            103.28 & 723.45 \\
-            103.29 & 1234.56 \\
-            \bottomrule
-        \end{tabular}
-        \end{center}
-    \end{columns}
-
-    \begin{center}
-        Spread : $103.27 - 103.25 = 0.02 \approx 1.94$ bps
-    \end{center}
-\end{frame}
-
-% --- Slide 11 : Types d'ordres
-\begin{frame}{Types d'ordres supportés}
-    \begin{block}{5 types d'ordres normalisés}
-        \footnotesize
-        \begin{tabular}{ll}
-            \toprule
-            \textbf{Type} & \textbf{Comportement} \\
-            \midrule
-            \texttt{GoodTillCancel} & actif jusqu'à exécution ou annulation \\
-            \texttt{Market}         & converti en ordre limite agressif \\
-            \texttt{ImmediateOrCancel} & exécution partielle, reste annulé \\
-            \texttt{FillOrKill}     & tout-ou-rien, rejeté sinon \\
-            \texttt{GoodForDay}     & annulé en fin de journée (15:59) \\
-            \bottomrule
-        \end{tabular}
-    \end{block}
-
-    \begin{block}{Tests fonctionnels}
-        Suite \texttt{OrderBookTests} couvrant :
-        \begin{itemize}
-            \item insertion / annulation / modification ;
-            \item matching prix-temps avec tous les types d'ordres ;
-            \item exécutions partielles, rejet \texttt{FillOrKill}, nettoyage \texttt{GoodForDay}.
-        \end{itemize}
-    \end{block}
-\end{frame}
-
-% --- Slide 12 : Performance / benchmarks
-\begin{frame}{Benchmarks du moteur}
-    \begin{block}{Méthodologie}
-        Exécutable \texttt{OrderBookBenchmark} : plusieurs millions d'ordres synthétiques,
-        mesure de latence et de débit sur matériel de développement standard.
-    \end{block}
-
-    \begin{center}
-    \begin{tabular}{lcc}
-        \toprule
-        \textbf{Opération} & \textbf{Complexité} & \textbf{Débit mesuré} \\
-        \midrule
-        Ajout d'ordre        & $O(\log n)$   & $\approx 400$\,k ops/s \\
-        Annulation           & $O(1)$        & $\approx 2$\,M ops/s   \\
-        Modification         & $O(\log n)$   & $\approx 270$\,k ops/s \\
-        Matching             & $O(k\log n)$  & $\approx 350$\,k matches/s \\
-        Snapshot             & $O(m)$        & $\approx 500$\,k snapshots/s \\
-        \bottomrule
-    \end{tabular}
-    \end{center}
-
-    \vspace{0.3cm}
-    \begin{block}{Résultat}
-        Latence opérationnelle dans la fourchette \alert{$2$--$4\,\mu$s},
-        conforme à un usage en trading algorithmique \textit{buy-side}
-        (hors HFT extrême).
-    \end{block}
-\end{frame}
-
-% ===============================================================
-% PARTIE 4 -- Personne 4 : Données live + règles + dashboard
-% ===============================================================
-
-% --- Slide 13 : Données de marché temps réel
-\begin{frame}[fragile]{Données de marché temps réel}
-    \begin{columns}[T]
+% --- Slide 7 : Algorithme de matching
+\begin{frame}{Matching prix-temps}
+    \begin{columns}[c]
         \column{0.55\textwidth}
-        \textbf{Pipeline d'ingestion}
-        \begin{enumerate}
-            \item Requête HTTP REST vers l'API publique Binance via \texttt{libcurl}.
-            \item Parsing JSON avec \texttt{nlohmann/json}.
-            \item Injection du carnet d'ordres dans le moteur C++.
-            \item Affichage ANSI temps réel : top of book, SMA, ordres agents.
-            \item Sérialisation en \texttt{market\_state.json}.
-        \end{enumerate}
+        \centering
+        \begin{tikzpicture}[
+            every node/.style={font=\footnotesize},
+            buy/.style={draw=bidgreen, fill=bidgreen!15, rounded corners, minimum width=1.3cm, minimum height=0.6cm},
+            sell/.style={draw=askred, fill=askred!15, rounded corners, minimum width=1.3cm, minimum height=0.6cm}
+        ]
+            % Buy side
+            \node[buy] (b1) at (0,2.4) {\tiny 100 @ 103.25};
+            \node[buy] (b2) at (0,1.7) {\tiny 200 @ 103.24};
+            \node[buy] (b3) at (0,1.0) {\tiny 150 @ 103.23};
 
-        \column{0.45\textwidth}
-        \textbf{Lancement}
-        \begin{lstlisting}[language=bash]
-./build/LiveMarketData \
-    SOLUSDT 1 20
-# [SYMBOLE] [REFRESH_S] [DEPTH]
-        \end{lstlisting}
+            % Sell side
+            \node[sell] (s1) at (3,2.4) {\tiny 80 @ 103.27};
+            \node[sell] (s2) at (3,1.7) {\tiny 200 @ 103.28};
+            \node[sell] (s3) at (3,1.0) {\tiny 150 @ 103.29};
 
-        \textbf{Sorties}
-        \begin{itemize}
-            \item Bid/Ask/Mid/Spread
-            \item Profondeur du carnet
-            \item Indicateurs (SMA, déviation)
-            \item PnL en cours
-        \end{itemize}
+            \node at (0,3.05)   {\textbf{\color{bidgreen}BIDS}};
+            \node at (3,3.05)   {\textbf{\color{askred}ASKS}};
+
+            % Spread arrow
+            \draw[<->, thick, gold!80!black] (0.7,2.4) -- (2.3,2.4);
+            \node[fill=yellow!50, font=\tiny] at (1.5,2.4) {spread};
+
+            % match arrow
+            \node[draw=enseirbaccent, thick, fill=enseirbaccent!10, rounded corners, minimum width=4.5cm, minimum height=0.6cm] (match) at (1.5,0) {\textbf{Nouveau BUY 50 @ 103.27}};
+            \draw[->, thick, enseirbaccent] (match) to[bend right=20] (s1);
+            \node[font=\scriptsize, enseirbaccent] at (3.7,0.5) {match!};
+        \end{tikzpicture}
+
+        \column{0.42\textwidth}
+        \begin{block}{Règles}
+            \begin{enumerate}
+                \item \alert{Meilleur prix} d'abord
+                \item À prix égal : \alert{FIFO}
+                \item Exécutions partielles permises
+            \end{enumerate}
+        \end{block}
+        \vspace{0.2cm}
+        \footnotesize
+        Match dès que :
+        \[
+        P_{\text{buy}} \geq P_{\text{ask}}
+        \]
     \end{columns}
 \end{frame}
 
-% --- Slide 14 : Stratégies par règles
-\begin{frame}{Stratégies par règles}
-    \begin{block}{Mean Reversion (baseline interprétable)}
-        \begin{itemize}
-            \item ACHETER si prix $< \text{SMA} - 2\%$
-            \item VENDRE si prix $> \text{SMA} + 2\%$
-            \item ATTENDRE sinon
-        \end{itemize}
-    \end{block}
-
+% --- Slide 8 : Structures de données et complexité
+\begin{frame}{Structures de données}
     \begin{columns}[T]
         \column{0.5\textwidth}
-        \textbf{RSI (14 périodes)}
+        \footnotesize
         \begin{itemize}
-            \item RSI $< 30$ : zone de survente $\Rightarrow$ \alert{ACHAT}
-            \item RSI $> 70$ : zone de surachat $\Rightarrow$ \alert{VENTE}
+            \item Deux \texttt{std::map} séparées (bids \alert{$\downarrow$}, asks \alert{$\uparrow$})
+            \item Niveau de prix : \texttt{std::list} (FIFO)
+            \item \texttt{unordered\_map<id, iter>} : annulation \alert{$O(1)$}
         \end{itemize}
 
         \column{0.5\textwidth}
-        \textbf{Bollinger Bands ($\pm 2\sigma$)}
-        \begin{itemize}
-            \item Sortie sous la bande inférieure $\Rightarrow$ \alert{ACHAT}
-            \item Sortie au-dessus de la bande supérieure $\Rightarrow$ \alert{VENTE}
-        \end{itemize}
+        \scriptsize
+        \begin{tabular}{lll}
+            \toprule
+            \textbf{Op.} & \textbf{Complexité} & \textbf{Débit} \\
+            \midrule
+            Ajout         & $O(\log n)$  & $\approx 400$\,k/s \\
+            Annulation    & $O(1)$       & $\approx 2$\,M/s \\
+            Modification  & $O(\log n)$  & $\approx 270$\,k/s \\
+            Matching      & $O(k\log n)$ & $\approx 350$\,k/s \\
+            \bottomrule
+        \end{tabular}
     \end{columns}
 
     \vspace{0.3cm}
-    \begin{block}{Architecture modulaire}
-        Toutes les stratégies implémentent l'interface \texttt{BaseStrategy},
-        sélectionnables via la variable d'environnement \texttt{STRATEGY=...}.
+    \begin{block}{Performances mesurées}
+        Latence \alert{2--4\,$\mu$s} sur matériel de développement standard.\\
+        Cible $\geq 10^5$ ops/s : \textbf{atteinte}.
     \end{block}
 \end{frame}
 
-% --- Slide 15 : Tableau de bord
-\begin{frame}{Tableau de bord}
+% --- Slide 9 : Types d'ordres
+\begin{frame}{Cinq types d'ordres}
+    \centering
+    \begin{tikzpicture}[
+        every node/.style={font=\footnotesize},
+        type/.style={draw, rounded corners, fill=enseirbblue!15,
+                     minimum width=2.5cm, minimum height=1.4cm, align=center}
+    ]
+        \node[type] (gtc) at (0,0) {\textbf{GoodTillCancel} \\ \tiny actif jusqu'à \\ \tiny annulation};
+        \node[type] (mkt) at (3,0) {\textbf{Market} \\ \tiny limit \\ \tiny agressif};
+        \node[type] (ioc) at (6,0) {\textbf{IOC} \\ \tiny exéc. partielle, \\ \tiny reste annulé};
+        \node[type] (fok) at (9,0) {\textbf{FillOrKill} \\ \tiny tout ou \\ \tiny rien};
+        \node[type] (gfd) at (12,0) {\textbf{GoodForDay} \\ \tiny expire \\ \tiny à 15:59};
+    \end{tikzpicture}
+
+    \vspace{0.6cm}
+    \begin{block}{Tests fonctionnels}
+        Suite \texttt{OrderBookTests} couvre les 5 types : insertion, annulation, modification, exécution partielle, rejet \texttt{FillOrKill}, expiration \texttt{GFD}.
+    \end{block}
+\end{frame}
+
+% ===============================================================
+% PARTIE 4 -- Données + règles + dashboard
+% ===============================================================
+
+% --- Slide 10 : Pipeline Binance
+\begin{frame}{Pipeline d'ingestion temps réel}
+    \centering
+    \begin{tikzpicture}[
+        node distance=1cm,
+        every node/.style={font=\footnotesize},
+        box/.style={draw, rounded corners, minimum width=2.4cm, minimum height=1cm, align=center},
+        arr/.style={->, very thick, >=stealth, enseirbblue}
+    ]
+        \node[box, fill=yellow!20] (api) {\textbf{Binance API}\\\tiny REST/JSON};
+        \node[box, right=of api, fill=enseirbblue!20]  (curl) {\textbf{libcurl}\\\tiny HTTP};
+        \node[box, right=of curl, fill=enseirbblue!20] (parse){\textbf{nlohmann/json}\\\tiny parsing};
+        \node[box, right=of parse, fill=enseirbblue!25](book) {\textbf{Order Book}\\\tiny C++};
+        \node[box, below=of book, fill=gray!15]        (json) {\texttt{market\_state}\\\tiny JSON};
+
+        \draw[arr] (api) -- (curl);
+        \draw[arr] (curl) -- (parse);
+        \draw[arr] (parse) -- (book);
+        \draw[arr] (book) -- (json);
+    \end{tikzpicture}
+
+    \vspace{0.4cm}
     \begin{columns}[T]
         \column{0.5\textwidth}
-        \textbf{Architecture}
+        \textbf{Lancement}
+        \begin{block}{}
+            \texttt{./LiveMarketData SOLUSDT 1 20}
+        \end{block}
+        \column{0.5\textwidth}
+        \textbf{Sorties live}
         \begin{itemize}
-            \item Front-end statique HTML / CSS / JS
+            \item Bid / Ask / Mid / Spread
+            \item Profondeur, SMA, PnL
+        \end{itemize}
+    \end{columns}
+\end{frame}
+
+% --- Slide 11 : Mean Reversion (visuel)
+\begin{frame}{Stratégie : Mean Reversion}
+    \centering
+    \includegraphics[width=0.78\textwidth]{indic_meanrev.png}
+
+    \vspace{-0.2cm}
+    \footnotesize
+    \alert{ACHAT} si prix $<$ SMA$-2\%$ \quad $|$ \quad \alert{VENTE} si prix $>$ SMA$+2\%$
+\end{frame}
+
+% --- Slide 12 : RSI (visuel)
+\begin{frame}{Stratégie : RSI (14)}
+    \centering
+    \includegraphics[width=0.7\textwidth]{indic_rsi.png}
+
+    \vspace{-0.1cm}
+    \footnotesize
+    Oscillateur de momentum : $\text{RSI}<30$ $\rightarrow$ acheter ; $\text{RSI}>70$ $\rightarrow$ vendre.
+\end{frame}
+
+% --- Slide 13 : Bollinger (visuel)
+\begin{frame}{Stratégie : Bollinger Bands}
+    \centering
+    \includegraphics[width=0.78\textwidth]{indic_bollinger.png}
+
+    \vspace{-0.1cm}
+    \footnotesize
+    Bandes à $\pm 2\sigma$ : largeur $\propto$ volatilité, sortie de bande = signal.
+\end{frame}
+
+% --- Slide 14 : Dashboard
+\begin{frame}{Tableau de bord}
+    \begin{columns}[c]
+        \column{0.5\textwidth}
+        \centering
+        \begin{tikzpicture}[
+            every node/.style={font=\tiny},
+            screen/.style={draw, rounded corners=2pt, fill=white,
+                           minimum width=6cm, minimum height=4cm}
+        ]
+            \node[screen] (s) {};
+            % Header
+            \fill[enseirbblue] (s.north west) rectangle ($(s.north east)+(0,-0.4)$);
+            \node[white] at ($(s.north)+(0,-0.2)$) {\textbf{Order Book Engine -- Dashboard}};
+            % Mini panels
+            \node[draw, fill=bidgreen!20, minimum width=2.6cm, minimum height=1.5cm]
+                 (p1) at ($(s.north west)+(1.4,-1.3)$) {Carnet};
+            \node[draw, fill=enseirbaccent!20, minimum width=2.6cm, minimum height=1.5cm]
+                 (p2) at ($(s.north east)+(-1.4,-1.3)$) {Prix + SMA};
+            \node[draw, fill=gray!20, minimum width=2.6cm, minimum height=1.2cm]
+                 (p3) at ($(s.south west)+(1.4,1.0)$) {PnL / Position};
+            \node[draw, fill=yellow!20, minimum width=2.6cm, minimum height=1.2cm]
+                 (p4) at ($(s.south east)+(-1.4,1.0)$) {Ordres agent};
+        \end{tikzpicture}
+
+        \column{0.5\textwidth}
+        \begin{itemize}
+            \item Front HTML / CSS / JS
             \item Serveur Python léger
-            \item Lecture des fichiers JSON :
+            \item Lecture des JSON :
               \begin{itemize}
                 \item \texttt{market\_state.json}
                 \item \texttt{agent\_orders.json}
               \end{itemize}
             \item Rafraîchissement périodique
         \end{itemize}
-
-        \column{0.5\textwidth}
-        \textbf{Visualisations}
-        \begin{itemize}
-            \item Carnet d'ordres en direct
-            \item Courbe de prix + SMA
-            \item Position et PnL non réalisé
-            \item Historique des ordres agents
-            \item Métriques d'apprentissage
-        \end{itemize}
     \end{columns}
+\end{frame}
+
+% ===============================================================
+% PARTIE 5 -- RL classique
+% ===============================================================
+
+% --- Slide 15 : Boucle RL (schéma)
+\begin{frame}{Apprentissage par renforcement}
+    \centering
+    \begin{tikzpicture}[
+        every node/.style={font=\footnotesize},
+        agent/.style={draw, rounded corners, fill=enseirbblue!20,
+                      minimum width=3cm, minimum height=1.4cm, align=center},
+        env/.style={draw, rounded corners, fill=enseirbaccent!20,
+                    minimum width=3cm, minimum height=1.4cm, align=center},
+        arr/.style={->, very thick, >=stealth}
+    ]
+        \node[agent] (a) at (0,0)   {\textbf{Agent}\\\tiny politique $\pi$};
+        \node[env]   (e) at (6,0)   {\textbf{Environnement}\\\tiny carnet d'ordres};
+
+        \draw[arr, enseirbblue]    (a.north) to[bend left=30] node[above]{action $a_t$ \alert{(BUY/SELL/HOLD)}} (e.north);
+        \draw[arr, enseirbaccent]  (e.south) to[bend left=30] node[below, align=center]{état $s_t$ \alert{+} récompense $r_t$ \\ \tiny (imbalance, spread, momentum, inventaire, vol)} (a.south);
+    \end{tikzpicture}
 
     \vspace{0.4cm}
-    \begin{block}{Lancement}
-        \texttt{./run\_dashboard.sh} \quad puis \quad \url{http://localhost:<port>/}
+    \begin{block}{MDP du trading}
+        L'agent observe l'\alert{état}, choisit une \alert{action}, reçoit une \alert{récompense} (variation de PnL pénalisée par l'inventaire).
     \end{block}
 \end{frame}
 
-% --- Slide 16 : Validation des stratégies
-\begin{frame}{Validation et tests}
-    \begin{block}{Tests manuels Python}
-        \begin{itemize}
-            \item \texttt{test\_sma\_manual.py} : SMA correcte sur fenêtre glissante.
-            \item \texttt{test\_dqn\_manual.py} :
-              \begin{itemize}
-                \item BUY sélectionné dans les contextes attendus,
-                \item \alert{inventory guard} : SELL bloqué si inventaire nul.
-              \end{itemize}
-        \end{itemize}
-    \end{block}
-
-    \begin{block}{Tests C++}
-        Suite \texttt{OrderBookTests} : tests fonctionnels + benchmarks
-        intégrés au pipeline CMake.
-    \end{block}
-
-    \begin{block}{Reproductibilité}
-        Graines aléatoires fixées, checkpoints versionnés
-        (\texttt{models/*.pth}), logs d'entraînement (\texttt{*.log} + CSV).
-    \end{block}
-\end{frame}
-
-% ===============================================================
-% PARTIE 5 -- Personne 5 : RL classique (slides 17 à 20)
-% ===============================================================
-
-% --- Slide 17 : Vue d'ensemble RL
-\begin{frame}{Apprentissage par renforcement -- Vue d'ensemble}
-    \begin{block}{Formulation MDP du trading}
-        \begin{itemize}
-            \item \textbf{État} (dim 6) : imbalance, spread, déviation, momentum, inventaire, volatilité réalisée.
-            \item \textbf{Actions} : \texttt{BUY}, \texttt{SELL}, \texttt{HOLD}.
-            \item \textbf{Récompense} : variation de PnL \textit{mark-to-market}, pénalisée par l'inventaire.
-        \end{itemize}
-    \end{block}
-
-    \begin{columns}[T]
-        \column{0.5\textwidth}
-        \textbf{Approches comparées}
-        \begin{itemize}
-            \item \alert{Value-based} : DQN
-            \item \alert{Policy-based} : A2C, PPO
-            \item \alert{Model-based} : Dreamer v3
-        \end{itemize}
-
-        \column{0.5\textwidth}
-        \textbf{Données d'entraînement}
-        \begin{itemize}
-            \item \texttt{aggTrades} Binance, lecture \alert{streaming}
-            \item DQN : \texttt{BTCUSDT-2026-03} ($\sim$12\,M lignes)
-            \item A2C/PPO/Dreamer : \texttt{SOLUSDT-2026-02}
-        \end{itemize}
-    \end{columns}
-\end{frame}
-
-% --- Slide 18 : DQN
+% --- Slide 16 : DQN (architecture visuelle)
 \begin{frame}{DQN -- Deep Q-Network}
-    \begin{block}{Architecture}
-        Réseau \alert{dueling} avec activations SiLU et LayerNorm,
-        \alert{Double DQN} pour atténuer la sur-estimation des Q-valeurs.
-    \end{block}
+    \centering
+    \begin{tikzpicture}[
+        every node/.style={font=\footnotesize},
+        layer/.style={draw, rounded corners, minimum width=1.5cm, minimum height=2.5cm, align=center},
+        arr/.style={->, thick, >=stealth}
+    ]
+        \node[layer, fill=enseirbblue!10]  (s)  at (0,0)   {\textbf{État}\\$s_t$\\\tiny dim 6};
+        \node[layer, fill=enseirbblue!20]  (h1) at (2,0)   {\textbf{MLP}\\\tiny SiLU\\\tiny LayerNorm};
+        \node[layer, fill=enseirbblue!30]  (du) at (4.5,0.9){\textbf{V(s)}};
+        \node[layer, fill=enseirbblue!30]  (du2)at (4.5,-0.9){\textbf{A(s,a)}};
+        \node[layer, fill=enseirbaccent!25](q)  at (7,0)   {\textbf{Q(s,a)}\\\tiny BUY\\\tiny SELL\\\tiny HOLD};
 
-    \begin{columns}[T]
-        \column{0.5\textwidth}
-        \textbf{Améliorations clés}
-        \begin{itemize}
-            \item \textit{Dueling} : sépare $V(s)$ et $A(s,a)$
-            \item \textit{Double DQN} : cible découplée
-            \item \textit{Replay buffer} 200\,k transitions
-            \item Perte \alert{Smooth-L1} (Huber)
-            \item \textit{Gradient clipping}
-        \end{itemize}
+        \draw[arr] (s) -- (h1);
+        \draw[arr] (h1) -- (du);
+        \draw[arr] (h1) -- (du2);
+        \draw[arr] (du) -- (q);
+        \draw[arr] (du2) -- (q);
 
-        \column{0.5\textwidth}
-        \textbf{Hyperparamètres}
-        \begin{itemize}
-            \item $\gamma = 0.995$
-            \item lr $= 3 \times 10^{-4}$ (Adam)
-            \item Batch $= 256$
-            \item $\varepsilon$ : $1.0 \to 0.01$ (décroissant)
-            \item Target network sync périodique
-        \end{itemize}
-    \end{columns}
+        \node[font=\scriptsize, enseirbaccent] at (4.5, 2.2) {\textbf{Dueling}};
+    \end{tikzpicture}
 
-    \vspace{0.2cm}
-    \begin{block}{Optimisations}
-        Détection automatique CUDA, lecture streaming des CSV (jusqu'à 3\,Go),
-        sauvegarde périodique des poids.
-    \end{block}
+    \vspace{0.4cm}
+    \footnotesize
+    \begin{tabular}{ll}
+        \alert{Dueling} & $Q(s,a) = V(s) + (A(s,a) - \overline{A})$ \\
+        \alert{Double DQN} & cible découplée, anti-surestimation \\
+        \alert{Replay buffer} & 200\,k transitions \\
+        \alert{Huber loss} + clipping & stabilité numérique \\
+    \end{tabular}
 \end{frame}
 
-% --- A2C : page texte
-\begin{frame}{A2C -- Advantage Actor-Critic}
-    \begin{block}{Principe}
-        Combinaison \alert{acteur-critique} synchrone, mise à jour par avantage estimé.
-    \end{block}
-
-    \begin{columns}[T]
-        \column{0.5\textwidth}
-        \textbf{Architecture}
-        \begin{itemize}
-            \item \alert{Acteur} : politique $\pi_\theta(a|s)$
-            \item \alert{Critique} : valeur $V_\phi(s)$
-            \item Tronc commun partagé
-            \item Mise à jour par \alert{avantage} : $A = R - V(s)$
-        \end{itemize}
-
-        \column{0.5\textwidth}
-        \textbf{Pertes}
-        \begin{align*}
-            \mathcal{L}_\text{actor}   &= -\log \pi(a|s)\, A \\
-            \mathcal{L}_\text{critic}  &= (R - V(s))^2 \\
-            \mathcal{L}_\text{entropy} &= -\beta\, \mathcal{H}[\pi]
-        \end{align*}
-    \end{columns}
+% --- Slide 17 : DQN courbes
+\begin{frame}{DQN -- Apprentissage}
+    \centering
+    \IfFileExists{figures/dqn_training_metrics.png}{%
+        \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{dqn_training_metrics.png}
+    }{%
+        \IfFileExists{dqn_training_metrics.png}{%
+            \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{dqn_training_metrics.png}
+        }{%
+            \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{a2c_training_metrics.png}
+        }
+    }
 \end{frame}
 
-% --- A2C : courbe plein écran
-\begin{frame}{A2C -- Courbes d'entraînement}
-    \begin{center}
-        \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]{figures/a2c_training_metrics.png}
-    \end{center}
+% --- Slide 18 : Actor-Critic (schéma)
+\begin{frame}{A2C -- Actor-Critic}
+    \centering
+    \begin{tikzpicture}[
+        every node/.style={font=\footnotesize},
+        box/.style={draw, rounded corners, minimum width=2cm, minimum height=1cm, align=center},
+        arr/.style={->, thick, >=stealth}
+    ]
+        \node[box, fill=gray!20] (s) at (0,0) {État $s$};
+        \node[box, fill=enseirbblue!25] (trunk) at (3,0) {Tronc partagé};
+        \node[box, fill=enseirbaccent!25] (actor)  at (6.5,1)  {\textbf{Acteur}\\\tiny$\pi(a|s)$};
+        \node[box, fill=bidgreen!25]      (critic) at (6.5,-1) {\textbf{Critique}\\\tiny$V(s)$};
+
+        \draw[arr] (s) -- (trunk);
+        \draw[arr] (trunk) -- (actor);
+        \draw[arr] (trunk) -- (critic);
+
+        \node[font=\tiny] at (9,1)  {action $a_t$};
+        \node[font=\tiny] at (9,-1) {valeur $V_t$};
+        \draw[arr] (actor)  -- (9,1);
+        \draw[arr] (critic) -- (9,-1);
+    \end{tikzpicture}
+
+    \vspace{0.3cm}
+    \footnotesize
+    \begin{tabular}{ll}
+        \alert{Avantage} & $A_t = R_t - V(s_t)$ \\
+        $\mathcal{L}_{\text{actor}}$  & $-\log \pi(a_t|s_t)\, A_t$ \\
+        $\mathcal{L}_{\text{critic}}$ & $(R_t - V(s_t))^2$ \\
+    \end{tabular}
 \end{frame}
 
-% --- PPO : page texte
+% --- Slide 19 : A2C courbes
+\begin{frame}{A2C -- Apprentissage}
+    \centering
+    \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{a2c_training_metrics.png}
+\end{frame}
+
+% --- Slide 20 : PPO
 \begin{frame}{PPO -- Proximal Policy Optimization}
-    \begin{block}{Idée clé : clipping du ratio de politique}
+    \begin{block}{Idée : limiter l'écart entre la nouvelle politique et l'ancienne}
         \[
         \mathcal{L}^{\text{CLIP}} = \mathbb{E}_t\!\left[
             \min\!\big(r_t A_t,\;
             \mathrm{clip}(r_t, 1-\epsilon, 1+\epsilon)\, A_t\big)
-        \right],\;
-        r_t = \dfrac{\pi_\theta(a_t|s_t)}{\pi_{\theta_\text{old}}(a_t|s_t)}
+        \right]
         \]
     \end{block}
 
-    \begin{columns}[T]
-        \column{0.5\textwidth}
-        \textbf{Avantages sur A2C}
-        \begin{itemize}
-            \item Stabilité accrue
-            \item Pas de divergence brutale de la politique
-            \item Plusieurs époques sur le même batch
-        \end{itemize}
+    \centering
+    \begin{tikzpicture}[
+        every node/.style={font=\scriptsize}
+    ]
+        \draw[->] (-0.5,0) -- (5,0) node[right]{$r_t$};
+        \draw[->] (0,-0.5) -- (0,1.5) node[above]{clip};
+        \draw[red, thick] (0,0) -- (1,1) -- (3,1) -- (4.5,1.45);
+        \draw[gray, dashed] (1,0) -- (1,1);
+        \draw[gray, dashed] (3,0) -- (3,1);
+        \node at (1,-0.3) {$1-\epsilon$};
+        \node at (3,-0.3) {$1+\epsilon$};
+        \node[red] at (4,1.65) {sans clip};
+        \node[red] at (2,1.3) {clipé};
+    \end{tikzpicture}
 
-        \column{0.5\textwidth}
-        \textbf{Hyperparamètres}
-        \begin{itemize}
-            \item Clip $\epsilon = 0.2$
-            \item GAE $\lambda = 0.95$
-            \item lr $= 3 \times 10^{-4}$
-            \item Coef entropie $= 0.01$
-        \end{itemize}
-    \end{columns}
+    \vspace{0.1cm}
+    \footnotesize
+    \alert{Plus stable que A2C} : pas de divergence brutale, plusieurs époques par batch.
 \end{frame}
 
-% --- PPO : courbe plein écran
-\begin{frame}{PPO -- Courbes d'entraînement}
-    \begin{center}
-        \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]{figures/courbe_apprentissage.png}
-    \end{center}
+% --- Slide 21 : PPO courbes
+\begin{frame}{PPO -- Apprentissage}
+    \centering
+    \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{courbe_apprentissage.png}
 \end{frame}
 
 % ===============================================================
-% PARTIE 6 -- Personne 6 : Dreamer v3 + conclusion
+% PARTIE 6 -- Dreamer + conclusion
 % ===============================================================
 
-% --- Slide 21 : Dreamer v3 architecture
-\begin{frame}{Dreamer v3 -- Architecture model-based}
-    \begin{block}{Principe : apprendre dans l'imagination}
-        Un \alert{World Model} apprend la dynamique du marché ;
-        un acteur-critique est ensuite entraîné par
-        \alert{rollouts imaginés} dans ce modèle, sans interagir avec l'environnement.
-    \end{block}
+% --- Slide 22 : Dreamer principe
+\begin{frame}{Dreamer v3 -- Apprendre dans l'imagination}
+    \centering
+    \begin{tikzpicture}[
+        every node/.style={font=\footnotesize},
+        env/.style={draw, rounded corners, fill=gray!20,
+                    minimum width=2.5cm, minimum height=1cm, align=center},
+        wm/.style={draw, rounded corners, fill=enseirbaccent!20,
+                   minimum width=2.5cm, minimum height=1cm, align=center},
+        ag/.style={draw, rounded corners, fill=enseirbblue!20,
+                   minimum width=2.5cm, minimum height=1cm, align=center},
+        arr/.style={->, thick, >=stealth}
+    ]
+        \node[env] (env) at (0,0) {\textbf{Environnement} \\ \tiny réel};
+        \node[wm]  (wm)  at (4,0) {\textbf{World Model} \\ \tiny RSSM};
+        \node[ag]  (ac)  at (8,0) {\textbf{Acteur--Critique}};
 
+        \draw[arr] (env) -- node[above]{\tiny obs / récompense} (wm);
+        \draw[arr] (wm.north east) to[bend left=25] node[above]{\tiny rollouts imaginés}  (ac.north west);
+        \draw[arr] (ac.south west) to[bend left=25] node[below]{\tiny actions}  (wm.south east);
+    \end{tikzpicture}
+
+    \vspace{0.4cm}
+    \begin{block}{Idée clé}
+        Apprendre la dynamique du marché dans un \alert{World Model},
+        puis entraîner l'acteur sur des trajectoires imaginées --- \emph{sans} interagir avec l'environnement réel.
+    \end{block}
+\end{frame}
+
+% --- Slide 23 : Dreamer RSSM zoom
+\begin{frame}{Dreamer v3 -- World Model (RSSM)}
+    \centering
+    \begin{tikzpicture}[
+        every node/.style={font=\scriptsize},
+        node distance=1cm,
+        circ/.style={draw, circle, minimum size=0.85cm, fill=enseirbblue!15},
+        sq/.style={draw, rounded corners, minimum width=0.95cm, minimum height=0.7cm, fill=enseirbaccent!15},
+        arr/.style={->, >=stealth}
+    ]
+        \node[circ] (h0) at (0,0) {$h_{t-1}$};
+        \node[circ] (h1) at (3,0) {$h_t$};
+        \node[circ] (h2) at (6,0) {$h_{t+1}$};
+
+        \node[sq, above=of h1] (z1) {$z_t$};
+        \node[sq, above=of h2] (z2) {$z_{t+1}$};
+
+        \node[sq, below=of h1, fill=gray!20] (x1) {$x_t$};
+        \node[sq, below=of h2, fill=gray!20] (x2) {$x_{t+1}$};
+
+        \draw[arr] (h0) -- node[above]{\tiny GRU} (h1);
+        \draw[arr] (h1) -- node[above]{\tiny GRU} (h2);
+        \draw[arr] (h1) -- (z1);
+        \draw[arr] (h2) -- (z2);
+        \draw[arr] (x1) -- (h1);
+        \draw[arr] (x2) -- (h2);
+    \end{tikzpicture}
+
+    \vspace{0.3cm}
+    \footnotesize
+    \alert{Latents catégoriels $32\times32$} \;|\;
+    \alert{GRU} récurrent \;|\;
+    \alert{symlog} pour stabilité numérique
+\end{frame}
+
+% --- Slide 24 : Dreamer courbes
+\begin{frame}{Dreamer v3 -- Apprentissage}
+    \centering
+    \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{dreamer_training_metrics.png}
+\end{frame}
+
+% --- Slide 25a : Protocole de backtest
+\begin{frame}{Comparaison -- Protocole de test}
     \begin{columns}[T]
         \column{0.5\textwidth}
-        \textbf{World Model}
+        \textbf{\color{enseirbblue}Données}
         \begin{itemize}
-            \item Encodeur d'observations
-            \item \alert{RSSM} (Recurrent State-Space Model)
-              \begin{itemize}
-                \item Latents catégoriels $32 \times 32$
-                \item GRU pour la mémoire récurrente
-              \end{itemize}
-            \item Prédicteurs : reward, continuation, observation
+            \item Source : \alert{Binance aggTrades}
+            \item Symbole : \texttt{SOLUSDT}
+            \item Période : \alert{février 2026}
+            \item $\sim 6$ millions de trades agrégés
+            \item Régime : tendance baissière $105 \to 85$ USDT
         \end{itemize}
 
         \column{0.5\textwidth}
-        \textbf{Acteur-Critique}
+        \textbf{\color{enseirbblue}Backtest}
         \begin{itemize}
-            \item Entraîné sur \alert{rollouts imaginés}
-            \item Pas d'interaction avec l'environnement réel pendant la phase d'imagination
-            \item \texttt{symlog} / \texttt{symexp} pour stabilité numérique
-              des récompenses à grande dynamique
+            \item \alert{6000 bougies} de 1000 ticks
+            \item Quantité : 1 SOL / ordre
+            \item Inventaire : $\pm 5$ positions max
+            \item PnL \alert{mark-to-market}
+            \item Sharpe annualisé, drawdown max
+            \item \texttt{seed = 42} (reproductible)
         \end{itemize}
     \end{columns}
-\end{frame}
 
-% --- Dreamer v3 : courbe plein écran
-\begin{frame}{Dreamer v3 -- Courbes d'entraînement}
-    \begin{center}
-        \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]{figures/dreamer_training_metrics.png}
-    \end{center}
-\end{frame}
-
-% --- Slide 23 : Comparaison des stratégies
-\begin{frame}{Comparaison des stratégies}
-    \input{comparison_table.tex}
-
-    \begin{block}{Lecture}
-        \begin{itemize}
-            \item \alert{DQN} et \alert{Dreamer v3} dominent en PnL ; Dreamer
-              affiche le \textbf{meilleur drawdown} grâce à son inertie d'action.
-            \item Les baselines règles fonctionnent en marché \textit{mean-reverting}
-              mais Bollinger souffre de la baisse soutenue ($105 \to 85$ USDT).
-            \item Sensibilité au \textit{reward shaping} et non-stationnarité crypto :
-              limites communes aux 4 agents RL.
-        \end{itemize}
+    \vspace{0.3cm}
+    \begin{block}{Conditions communes}
+        Toutes les stratégies (règles \emph{et} RL) sont évaluées sur \alert{le même flux de prix},
+        avec la même fonction de coût et les mêmes bornes d'inventaire.
+        Seule la politique de décision change.
     \end{block}
 \end{frame}
 
-% --- Slide 24 : Conclusion et perspectives
-\begin{frame}{Conclusion et perspectives}
-    \begin{block}{Bilan}
-        \begin{itemize}
-            \item Moteur C++ haute performance ($\sim 400$\,k ops/s, latence $\mu$s).
-            \item Ingestion temps réel Binance + dashboard interactif.
-            \item 3 stratégies par règles + 4 agents RL convergents.
-        \end{itemize}
-    \end{block}
+% --- Slide 25b : Tableau de résultats
+\begin{frame}{Comparaison -- Résultats}
+    \IfFileExists{comparison_table.tex}{\input{comparison_table.tex}}{\input{rapport/comparison_table.tex}}
 
-    \begin{block}{Perspectives}
-        \begin{itemize}
-            \item Espace d'état enrichi : carnet \alert{multi-niveaux}, \textit{order flow imbalance}.
-            \item \textit{Reward} à risque ajusté (Sharpe différentiel).
-            \item \textit{Walk-forward validation} systématique.
-        \end{itemize}
-    \end{block}
+    \vspace{0.2cm}
+    \footnotesize
+    \begin{itemize}
+        \item \alert{DQN} et \alert{Dreamer v3} dominent en PnL.
+        \item Dreamer affiche le meilleur \alert{drawdown} (inertie d'action).
+        \item Bollinger souffre de la baisse soutenue $105 \to 85$ USDT.
+    \end{itemize}
+\end{frame}
 
+% --- Slide 26 : Conclusion
+\begin{frame}{Bilan \& perspectives}
+    \begin{columns}[T]
+        \column{0.5\textwidth}
+        \textbf{\color{bidgreen}Réalisé}
+        \begin{itemize}
+            \item Moteur C++ $\sim 400$\,k ops/s
+            \item Ingestion live Binance
+            \item Dashboard interactif
+            \item 3 stratégies par règles
+            \item 4 agents RL (DQN, A2C, PPO, Dreamer)
+        \end{itemize}
+
+        \column{0.5\textwidth}
+        \textbf{\color{enseirbaccent}Perspectives}
+        \begin{itemize}
+            \item Carnet \alert{multi-niveaux}
+            \item \emph{Order flow imbalance}
+            \item Reward Sharpe-différentiel
+            \item \emph{Walk-forward validation}
+        \end{itemize}
+    \end{columns}
+
+    \vspace{0.6cm}
     \begin{center}
         \Large \alert{Merci de votre attention --- Questions ?}
     \end{center}

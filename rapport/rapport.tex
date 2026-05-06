@@ -1,0 +1,801 @@
+\documentclass[11pt,a4paper]{article}
+
+% ---------------------------------------------------------------
+% Packages
+% ---------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{amsmath,amssymb}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{fancyhdr}
+\setlength{\headheight}{14pt}
+\usepackage{titling}
+
+% Diagramme de Gantt (à activer si pgfgantt est installé)
+\usepackage{pgfgantt}
+
+% ---------------------------------------------------------------
+% Hyperliens
+% ---------------------------------------------------------------
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=blue,
+    citecolor=black
+}
+
+% ---------------------------------------------------------------
+% Style code
+% ---------------------------------------------------------------
+\definecolor{codegray}{rgb}{0.95,0.95,0.95}
+\definecolor{codekw}{rgb}{0.13,0.29,0.53}
+\definecolor{codestr}{rgb}{0.45,0.45,0.45}
+\definecolor{codecmt}{rgb}{0.25,0.50,0.25}
+
+\lstset{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{codekw}\bfseries,
+    stringstyle=\color{codestr},
+    commentstyle=\color{codecmt}\itshape,
+    breaklines=true,
+    frame=single,
+    showstringspaces=false,
+    tabsize=2,
+    captionpos=b,
+    extendedchars=true,
+    inputencoding=utf8,
+    literate=%
+        {é}{{\'e}}1 {è}{{\`e}}1 {ê}{{\^e}}1 {ë}{{\"e}}1
+        {É}{{\'E}}1 {È}{{\`E}}1 {Ê}{{\^E}}1 {Ë}{{\"E}}1
+        {à}{{\`a}}1 {â}{{\^a}}1 {ä}{{\"a}}1
+        {À}{{\`A}}1 {Â}{{\^A}}1 {Ä}{{\"A}}1
+        {î}{{\^i}}1 {ï}{{\"i}}1 {Î}{{\^I}}1 {Ï}{{\"I}}1
+        {ô}{{\^o}}1 {ö}{{\"o}}1 {Ô}{{\^O}}1 {Ö}{{\"O}}1
+        {û}{{\^u}}1 {ü}{{\"u}}1 {ù}{{\`u}}1
+        {Û}{{\^U}}1 {Ü}{{\"U}}1 {Ù}{{\`U}}1
+        {ç}{{\c c}}1 {Ç}{{\c C}}1
+        {œ}{{\oe}}1 {Œ}{{\OE}}1
+        {æ}{{\ae}}1 {Æ}{{\AE}}1
+}
+
+% ---------------------------------------------------------------
+% En-têtes
+% ---------------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Order Book Engine -- Rapport de PFA}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ---------------------------------------------------------------
+% Page de titre
+% ---------------------------------------------------------------
+\title{
+    \vspace{-1cm}
+    \Huge \textbf{Order Book Engine} \\[0.3cm]
+    \Large Moteur de carnet d'ordres haute performance \\
+    et agents de trading par apprentissage par renforcement \\[0.5cm]
+    \large Projet de Fin d'Année (PFA)
+}
+\author{Yani Haouchine}
+\date{\today}
+
+% ===============================================================
+\begin{document}
+% ===============================================================
+
+\begin{titlingpage}
+    \maketitle
+    \vfill
+    \begin{center}
+        \large
+        ENSEIRB-MATMECA \\
+        % TODO: Compléter -- Filière, année, encadrant(s)
+    \end{center}
+\end{titlingpage}
+
+\tableofcontents
+\newpage
+
+% ===============================================================
+\section{Introduction}
+% ===============================================================
+
+Ce rapport présente le projet \textit{Order Book Engine}, un moteur de
+carnet d'ordres haute performance écrit en C++20, complété par une
+suite d'agents de trading développés en Python. Le projet couvre à la
+fois l'aspect \textbf{infrastructure de marché} (matching engine,
+intégration de données temps réel) et l'aspect \textbf{stratégie de
+trading} (agents par règles et agents par apprentissage par
+renforcement).
+
+% ===============================================================
+\section{Besoins du client}
+\label{sec:besoins}
+% ===============================================================
+
+% TODO: Reformuler / compléter avec la véritable expression de besoin
+% du client si elle vous a été transmise sous une autre forme.
+
+Le client souhaite disposer d'une plateforme permettant :
+
+\begin{itemize}[leftmargin=1.2cm]
+    \item de \textbf{simuler un carnet d'ordres} fidèle aux
+          conventions des marchés financiers (priorité prix-temps,
+          plusieurs types d'ordres) ;
+    \item de \textbf{récupérer en temps réel} les données d'un
+          marché crypto (Binance) pour alimenter la simulation ;
+    \item d'\textbf{exécuter des stratégies de trading
+          algorithmiques} sur ce flux temps réel, depuis les
+          stratégies classiques (mean reversion, RSI, Bollinger)
+          jusqu'aux agents d'\textit{apprentissage par
+          renforcement} (DQN, A2C, PPO, Dreamer~v3) ;
+    \item de \textbf{visualiser le marché et les performances}
+          via un tableau de bord interactif ;
+    \item de mesurer la \textbf{performance brute} du moteur
+          (latence, débit) afin d'évaluer sa pertinence dans un
+          contexte applicatif réaliste.
+\end{itemize}
+
+% ===============================================================
+\section{Cahier des charges}
+\label{sec:cdc}
+% ===============================================================
+
+\subsection{Exigences fonctionnelles}
+
+\begin{itemize}[leftmargin=1.2cm]
+    \item \textbf{F1 -- Moteur de matching} : gestion des ordres
+          d'achat/vente avec priorité prix-temps (FIFO intra-niveau).
+    \item \textbf{F2 -- Types d'ordres supportés} :
+          \texttt{GoodTillCancel}, \texttt{Market},
+          \texttt{ImmediateOrCancel}, \texttt{FillOrKill},
+          \texttt{GoodForDay}.
+    \item \textbf{F3 -- Données de marché temps réel} :
+          intégration de l'API Binance (REST) pour récupérer
+          le carnet d'ordres et les agrégats de transactions.
+    \item \textbf{F4 -- Agents de trading} : architecture
+          modulaire permettant de brancher facilement plusieurs
+          stratégies (règles, RL).
+    \item \textbf{F5 -- Tableau de bord} : visualisation du
+          marché, des positions, du PnL et des métriques
+          d'apprentissage.
+    \item \textbf{F6 -- Persistance} : sauvegarde des modèles
+          entraînés et des métriques d'entraînement (CSV/PNG).
+\end{itemize}
+
+\subsection{Exigences non fonctionnelles}
+
+\begin{itemize}[leftmargin=1.2cm]
+    \item \textbf{NF1 -- Performance} : insertion d'ordres
+          $\geq 100\,\text{k ops/s}$, latence d'opération
+          de l'ordre de la microseconde.
+    \item \textbf{NF2 -- Portabilité} : compilation sous
+          Linux / macOS / Windows (CMake + C++20).
+    \item \textbf{NF3 -- Maintenabilité} : séparation
+          claire entre cœur de matching, accès aux données
+          de marché et logique d'agent.
+    \item \textbf{NF4 -- Reproductibilité} : scripts
+          d'entraînement déterministes (graines aléatoires,
+          checkpoints, logs).
+\end{itemize}
+
+\subsection{Périmètre}
+
+% TODO: Préciser ce qui est dans / hors périmètre
+\paragraph{Inclus.} Moteur, ingestion données Binance,
+agents règles et RL, dashboard, benchmarks.
+
+\paragraph{Exclus.} Trading en argent réel, gestion
+multi-comptes, conformité réglementaire, optimisation FPGA.
+
+% ===============================================================
+\section{Organisation du projet}
+\label{sec:orga}
+% ===============================================================
+
+\subsection{Équipe et rôles}
+
+% TODO: Compléter avec les noms et rôles réels.
+\begin{itemize}[leftmargin=1.2cm]
+    \item Développement moteur C++ : \textit{à compléter}
+    \item Intégration données de marché : \textit{à compléter}
+    \item Agents de trading et RL : \textit{à compléter}
+    \item Tableau de bord : \textit{à compléter}
+\end{itemize}
+
+\subsection{Méthodologie}
+
+% TODO: Décrire la méthode (Agile, sprints, revues, etc.)
+Le projet a été conduit de manière itérative : une première
+itération a livré le moteur de matching et ses tests, puis
+l'ingestion de données réelles, puis successivement les agents
+règles, RL et le dashboard. Chaque itération s'est appuyée
+sur des benchmarks pour valider la non-régression de la
+performance.
+
+\subsection{Outils}
+
+\begin{itemize}[leftmargin=1.2cm]
+    \item \textbf{Versionnage} : Git (branches \textit{feature}
+          + intégration sur \texttt{master}).
+    \item \textbf{Build} : CMake 3.10+, GCC/Clang.
+    \item \textbf{Dépendances} : \texttt{libcurl 8.4.0},
+          \texttt{nlohmann/json 3.11.3} (téléchargées via
+          \texttt{FetchContent}).
+    \item \textbf{Python} : PyTorch (CUDA quand disponible),
+          NumPy, Matplotlib.
+    \item \textbf{Tableau de bord} : HTML/CSS/JS + serveur
+          Python.
+\end{itemize}
+
+\subsection{Arborescence}
+
+\begin{lstlisting}[language=bash,caption={Structure du dépôt (extrait)}]
+ein8-proj2-pfa-27707/
+|-- CMakeLists.txt
+|-- include/                # Coeur, OrderBook, MarketData, LiveMarketData
+|-- src/                    # Implémentations C++
+|   |-- OrderBook/
+|   `-- LiveMarketData/
+|-- tests/                  # Tests fonctionnels et benchmarks
+|-- agents/                 # Agents Python
+|   |-- main.py             # Point d'entrée trading agent
+|   |-- strategies/         # Mean reversion, RSI, Bollinger,
+|   |                       #   DQN, A2C, PPO, Dreamer
+|   |-- exchange/           # Client Binance testnet
+|   |-- train_dqn.py
+|   |-- train_a2c.py
+|   `-- train_dreamer.py
+|-- dashboard/              # Tableau de bord web
+|-- data/                   # Données de marché (CSV)
+|-- models/                 # Modèles RL entraînés (.pth)
+`-- README.md
+\end{lstlisting}
+
+% ===============================================================
+\section{Diagramme de Gantt}
+\label{sec:gantt}
+% ===============================================================
+
+% TODO: Ajuster les dates aux dates réelles du projet.
+% Les dates ci-dessous sont estimées à partir de l'historique git.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{ganttchart}[
+        hgrid,
+        vgrid,
+        x unit=0.9cm,
+        y unit chart=0.6cm,
+        time slot format=isodate-yearmonth,
+        bar/.append style={fill=blue!40},
+        group/.append style={fill=black!70},
+        milestone/.append style={fill=red}
+    ]{2026-01}{2026-04}
+        \gantttitlecalendar{year, month=shortname} \\
+        \ganttgroup{Moteur d'ordres C++}{2026-01}{2026-02} \\
+        \ganttbar{Spécifications}{2026-01}{2026-01} \\
+        \ganttbar{Implémentation matching}{2026-01}{2026-02} \\
+        \ganttbar{Tests + benchmarks}{2026-02}{2026-02} \\
+        \ganttgroup{Données de marché}{2026-02}{2026-03} \\
+        \ganttbar{Intégration Binance API}{2026-02}{2026-03} \\
+        \ganttbar{Affichage temps réel}{2026-03}{2026-03} \\
+        \ganttgroup{Agents}{2026-03}{2026-04} \\
+        \ganttbar{Stratégies règles}{2026-03}{2026-03} \\
+        \ganttbar{DQN}{2026-03}{2026-04} \\
+        \ganttbar{A2C / PPO}{2026-04}{2026-04} \\
+        \ganttbar{Dreamer v3}{2026-04}{2026-04} \\
+        \ganttgroup{Dashboard \& Rapport}{2026-04}{2026-04} \\
+        \ganttbar{Dashboard web}{2026-04}{2026-04} \\
+        \ganttbar{Rédaction rapport}{2026-04}{2026-04}
+    \end{ganttchart}
+    }
+    \caption{Diagramme de Gantt prévisionnel du projet}
+    \label{fig:gantt}
+\end{figure}
+
+% ===============================================================
+\section{Techniques mises en œuvre}
+\label{sec:techniques}
+% ===============================================================
+
+\subsection{Moteur de carnet d'ordres}
+
+\subsubsection{Structures de données}
+
+Le carnet d'ordres est représenté par deux \texttt{std::map}
+distinctes pour les bids et les asks. Cette séparation permet
+deux ordres de tri opposés (descendant pour les achats,
+ascendant pour les ventes) et un accès $O(\log n)$ au meilleur
+prix. Chaque niveau de prix contient une liste FIFO d'ordres
+(\texttt{std::list<OrderPointer>}).
+
+Une table de hachage \texttt{std::unordered\_map<OrderId,
+OrderEntry>} stocke en plus, pour chaque ordre, un itérateur
+sur sa position dans la liste : cela permet l'\textbf{annulation
+en $O(1)$} d'un ordre par identifiant.
+
+\paragraph{Complexités obtenues}
+\begin{center}
+    \begin{tabular}{lll}
+        \toprule
+        Opération & Complexité & Justification \\
+        \midrule
+        Ajout ordre & $O(\log n)$ & insertion dans la map des niveaux \\
+        Annulation  & $O(1)$      & itérateur stocké dans \texttt{OrderEntry} \\
+        Modification & $O(\log n)$ & cancel + insert \\
+        Matching    & $O(k \log n)$ & $k$ trades exécutés \\
+        \bottomrule
+    \end{tabular}
+\end{center}
+
+\subsubsection{Algorithme de matching}
+
+Les ordres se matchent dès que le prix d'un buy est
+$\geq$ au meilleur ask, ou symétriquement. La priorité est
+\textbf{prix-temps} :
+\begin{enumerate}[leftmargin=1.2cm]
+    \item meilleur prix d'abord ;
+    \item au sein d'un niveau, ordre d'arrivée (FIFO) ;
+    \item exécutions partielles autorisées (sauf
+          \texttt{FillOrKill}).
+\end{enumerate}
+
+Les ordres \texttt{Market} sont convertis en ordres limites
+agressifs (prix extrême) afin de \textbf{réutiliser le code
+de matching} existant et d'éviter une branche dédiée.
+
+\subsection{Données de marché temps réel}
+
+L'exécutable \texttt{LiveMarketData} interroge l'API
+publique Binance via \texttt{libcurl}, parse la réponse
+JSON avec \texttt{nlohmann/json}, puis injecte le carnet
+dans le moteur. Un \texttt{Display} ANSI affiche en
+continu le \textit{top of book}, la SMA et les ordres
+agents.
+
+\subsection{Agents de trading}
+
+\subsubsection{Stratégies par règles}
+
+\begin{itemize}[leftmargin=1.2cm]
+    \item \textbf{Mean Reversion} : achète quand le prix est
+          $-2\,\%$ sous la SMA, vend si $+2\,\%$ au-dessus.
+    \item \textbf{RSI} : RSI sur 14 périodes, achat si
+          $<30$, vente si $>70$.
+    \item \textbf{Bollinger Bands} : achat/vente quand
+          le prix sort des bandes à $\pm 2\sigma$.
+\end{itemize}
+
+\subsubsection{Apprentissage par renforcement}
+
+\paragraph{DQN (Deep Q-Network).}
+Réseau \textit{dueling} avec activations SiLU et
+LayerNorm, \textbf{Double DQN}, \textit{replay buffer}
+de 200~000 transitions, perte Smooth-L1, gradient
+clipping. L'espace d'état est de dimension 6
+(imbalance, spread, déviation, momentum, inventaire,
+volatilité réalisée). Trois actions : BUY, SELL, HOLD.
+Hyperparamètres : $\gamma = 0.995$, $\text{lr} =
+3\times 10^{-4}$, batch 256, $\varepsilon$ décroissant
+$1.0 \to 0.01$.
+
+\paragraph{A2C (Advantage Actor-Critic).}
+Acteur et critique partageant un tronc commun, mise à
+jour synchrone par avantage estimé. Variante
+permettant de comparer une approche \textit{policy-based}
+au DQN \textit{value-based}.
+
+\paragraph{PPO (Proximal Policy Optimization).}
+\textit{Clipped surrogate objective} pour stabiliser
+les mises à jour de politique. L'apprentissage est
+plus stable que A2C grâce à la borne sur le ratio
+$\pi_\theta / \pi_{\theta_\text{old}}$.
+
+\paragraph{Dreamer v3 (model-based).}
+Architecture la plus avancée du projet : un
+\textbf{World Model} composé d'un encodeur, d'un
+\textit{Recurrent State-Space Model} (RSSM) à latents
+catégoriels (32$\times$32) et d'un GRU, puis un
+\textbf{acteur-critique entraîné en imagination}
+sur les rollouts du world model. Utilise
+\texttt{symlog}/\texttt{symexp} pour la stabilité
+numérique des récompenses à grande dynamique.
+
+\subsection{Infrastructure d'entraînement}
+
+\begin{itemize}[leftmargin=1.2cm]
+    \item Détection automatique de CUDA, repli sur CPU.
+    \item Chargement \textit{streaming} des CSV Binance
+          (jusqu'à 3~Go) pour ne pas saturer la RAM.
+    \item Sauvegarde périodique des poids
+          (\texttt{models/*.pth}).
+    \item Métriques temps réel : loss, reward, PnL,
+          inventaire, ratio actions, Sharpe approché,
+          drawdown, mémoire GPU.
+\end{itemize}
+
+\subsection{Tableau de bord}
+
+Front-end statique HTML/CSS/JS servi par un petit
+serveur Python ; lit les fichiers JSON
+\texttt{data/market\_state.json} et
+\texttt{data/agent\_orders.json} produits par le
+moteur et l'agent.
+
+% ===============================================================
+\section{Expérimentations}
+\label{sec:experimentations}
+% ===============================================================
+
+\subsection{Benchmarks du moteur}
+
+L'exécutable \texttt{OrderBookBenchmark} mesure la
+latence et le débit des opérations clés sur un volume
+de plusieurs millions d'ordres synthétiques.
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{lcc}
+        \toprule
+        \textbf{Opération} & \textbf{Complexité} & \textbf{Débit mesuré} \\
+        \midrule
+        Ajout d'ordre        & $O(\log n)$   & $\approx 400\,$k ops/s \\
+        Annulation           & $O(1)$        & $\approx 2\,$M ops/s   \\
+        Modification         & $O(\log n)$   & $\approx 270\,$k ops/s \\
+        Matching             & $O(k\log n)$  & $\approx 350\,$k matches/s \\
+        Snapshot \texttt{GetOrderInfo} & $O(m)$ & $\approx 500\,$k snapshots/s \\
+        \bottomrule
+    \end{tabular}
+    \caption{Performances mesurées du moteur (latence 2--4~$\mu$s).}
+    \label{tab:bench}
+\end{table}
+
+\subsection{Entraînements RL}
+
+Les agents RL ont été entraînés sur des données
+\textit{aggTrades} Binance :
+\begin{itemize}[leftmargin=1.2cm]
+    \item DQN : \texttt{BTCUSDT-aggTrades-2026-03.csv}
+          (lecture en streaming, $\sim$~12~M lignes/époque).
+    \item A2C, PPO, Dreamer~v3 :
+          \texttt{SOLUSDT-aggTrades-2026-02.csv}.
+\end{itemize}
+
+Un protocole identique a été appliqué :
+\textit{warm-up} de 2000 lignes, log toutes les 2000
+itérations, sauvegarde du modèle à chaque époque,
+suivi des actions (\textit{hold/buy/sell}), du PnL
+\textit{mark-to-market} et du \textit{Sharpe ratio}
+glissant.
+
+\subsection{Validation manuelle}
+
+Des scripts \texttt{test\_dqn\_manual.py} et
+\texttt{test\_sma\_manual.py} vérifient que :
+\begin{itemize}[leftmargin=1.2cm]
+    \item BUY est sélectionné dans les contextes attendus ;
+    \item SELL est bloqué quand l'inventaire est nul
+          (\textit{inventory guard}) ;
+    \item la SMA est calculée correctement sur la
+          fenêtre glissante.
+\end{itemize}
+
+% ===============================================================
+\section{Résultats et discussion}
+\label{sec:resultats}
+% ===============================================================
+
+\subsection{Performance du moteur}
+
+Les chiffres du tableau~\ref{tab:bench} montrent que
+le moteur atteint des débits de l'ordre de la
+\textbf{centaine de milliers d'opérations par seconde}
+en insertion et plusieurs \textbf{millions} en
+annulation. La latence reste dans la fourchette
+$2$--$4\,\mu\text{s}$, compatible avec un usage en
+trading algorithmique côté \textit{buy-side} (hors
+HFT extrême).
+
+% TODO: Insérer si disponible un graphique latence vs taille
+% du carnet (sortie OrderBookBenchmark) -- sinon laisser le
+% commentaire ci-dessous tel quel.
+
+\subsection{Apprentissage des agents RL}
+
+\subsubsection{A2C}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/a2c_training_metrics.png}
+    \caption{Courbes d'apprentissage de l'agent A2C
+             (loss, récompense, PnL).}
+    \label{fig:a2c}
+\end{figure}
+
+% TODO: Discuter en détail :
+%   - comportement initial (exploration aléatoire)
+%   - point d'inflexion de la courbe de récompense
+%   - stabilité finale, plafond éventuel
+
+\subsubsection{PPO}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/courbe_apprentissage.png}
+    \caption{Courbe d'apprentissage de l'agent PPO.}
+    \label{fig:ppo}
+\end{figure}
+
+% TODO: Discussion -- comparer la stabilité de PPO à
+% celle d'A2C, justifier par le mécanisme de clipping.
+
+\subsubsection{Dreamer v3}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/dreamer_training_metrics.png}
+    \caption{Courbes d'apprentissage de Dreamer~v3 :
+             loss du world model, loss acteur/critique,
+             récompense et PnL.}
+    \label{fig:dreamer}
+\end{figure}
+
+% TODO: Discuter :
+%   - convergence du world model (loss reconstruction)
+%   - apport du training en imagination
+%   - éventuel sur-apprentissage / instabilité
+
+\subsection{Comparaison des stratégies}
+
+% TODO: Compléter le tableau avec les chiffres réellement
+% obtenus à la fin des entraînements (PnL final, Sharpe,
+% drawdown max) -- ils sont présents dans les logs et CSV.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{lXXXX}
+        \toprule
+        \textbf{Stratégie} & \textbf{PnL final} & \textbf{Sharpe} & \textbf{Drawdown max} & \textbf{Remarques} \\
+        \midrule
+        Mean Reversion  & --- & --- & --- & baseline règles \\
+        RSI             & --- & --- & --- & baseline règles \\
+        Bollinger       & --- & --- & --- & baseline règles \\
+        DQN             & --- & --- & --- & value-based \\
+        A2C             & --- & --- & --- & policy-based \\
+        PPO             & --- & --- & --- & policy-based stable \\
+        Dreamer v3      & --- & --- & --- & model-based \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Comparaison des stratégies sur jeu de test commun.}
+    \label{tab:compare}
+\end{table}
+
+\subsection{Discussion}
+
+% TODO: rédiger en s'appuyant sur les chiffres ci-dessus.
+\paragraph{Ce qui fonctionne.} Le moteur tient ses
+objectifs de performance, l'intégration Binance est
+stable, les stratégies par règles donnent une
+\textit{baseline} interprétable et les agents RL
+convergent visiblement (figures \ref{fig:a2c},
+\ref{fig:ppo}, \ref{fig:dreamer}).
+
+\paragraph{Limites observées.} Les agents RL restent
+sensibles à la qualité du \textit{reward shaping} et
+à la non-stationnarité des marchés crypto.
+% TODO: documenter si vous avez vu un drift ou un
+% effondrement de PnL hors période d'entraînement.
+
+\paragraph{Pistes d'amélioration.}
+\begin{itemize}[leftmargin=1.2cm]
+    \item Enrichir l'espace d'état (carnet multi-niveaux,
+          \textit{order flow imbalance}).
+    \item Tester un \textit{reward} à risque ajusté
+          (Sharpe différentiel).
+    \item Intégrer un \textit{walk-forward validation}
+          plus systématique.
+\end{itemize}
+
+% ===============================================================
+\section{Manuel d'utilisation}
+\label{sec:manuel}
+% ===============================================================
+
+\subsection{Pré-requis}
+
+\begin{itemize}[leftmargin=1.2cm]
+    \item CMake $\geq$ 3.10, compilateur C++20
+          (GCC~10+, Clang~10+ ou MSVC~2019+).
+    \item Python 3.10+, PyTorch
+          (CUDA optionnel mais recommandé pour le DQN).
+    \item Connexion Internet (API Binance, téléchargement
+          des dépendances \texttt{libcurl} /
+          \texttt{nlohmann/json}).
+\end{itemize}
+
+\subsection{Compilation}
+
+\begin{lstlisting}[language=bash]
+# Première fois (configuration initiale)
+mkdir build && cd build
+cmake ..
+cmake --build . --config Release -j$(nproc)
+
+# Builds suivants
+./build.sh
+\end{lstlisting}
+
+\subsection{Lancement du moteur et des données live}
+
+\begin{lstlisting}[language=bash]
+# Tests + benchmarks
+./build/OrderBookTests
+
+# Affichage temps réel d'un symbole
+./build/LiveMarketData SOLUSDT 1 20
+# [SYMBOLE] [RAFRAICHISSEMENT_S] [PROFONDEUR]
+\end{lstlisting}
+
+\subsection{Lancement d'un agent}
+
+\begin{lstlisting}[language=bash]
+# Terminal 1 : flux de marché C++
+./run_market.sh
+
+# Terminal 2 : agent Python (stratégie au choix)
+STRATEGY=mean_reversion python3 -m agents.main
+STRATEGY=rsi             python3 -m agents.main
+STRATEGY=bollinger       python3 -m agents.main
+\end{lstlisting}
+
+\subsection{Entraînement des agents RL}
+
+\begin{lstlisting}[language=bash]
+# DQN (variante normale)
+python3 -m agents.train_dqn --variant normal \
+    --csv BTCUSDT-aggTrades-2026-03.csv \
+    --epochs 1 --rows-per-epoch 500000 \
+    --warmup-rows 2000 --log-every 2000
+
+# A2C
+python3 -m agents.train_a2c
+
+# Dreamer v3 (avec affichage live)
+python3 run_dreamer.py
+python3 run_dreamer.py --fast      # configuration CPU
+\end{lstlisting}
+
+\subsection{Tableau de bord}
+
+\begin{lstlisting}[language=bash]
+./run_dashboard.sh
+# Puis ouvrir http://localhost:<port>/ dans le navigateur
+\end{lstlisting}
+
+\subsection{Configuration Binance testnet}
+
+L'agent live utilise les clés API Binance testnet
+définies dans \texttt{agents/exchange/config.py}
+(à créer à partir de \texttt{config.example.py}).
+Les clés peuvent être obtenues sur
+\url{https://testnet.binance.vision/}.
+
+% ===============================================================
+\section{Maintenance}
+\label{sec:maintenance}
+% ===============================================================
+
+\subsection{Mise à jour des dépendances}
+
+\begin{itemize}[leftmargin=1.2cm]
+    \item \textbf{C++} : les versions de \texttt{libcurl}
+          et \texttt{nlohmann/json} sont fixées via
+          \texttt{FetchContent} dans \texttt{CMakeLists.txt}.
+          Mettre à jour les tags pour récupérer une nouvelle
+          version, puis re-builder à blanc :
+          \texttt{rm -rf build \&\& ./build.sh}.
+    \item \textbf{Python} : \texttt{pip install -U torch
+          numpy matplotlib pandas requests}.
+\end{itemize}
+
+\subsection{Ajout d'une nouvelle stratégie}
+
+\begin{enumerate}[leftmargin=1.2cm]
+    \item Créer \texttt{agents/strategies/ma\_strategie.py}
+          implémentant l'interface \texttt{BaseStrategy}.
+    \item L'enregistrer dans \texttt{agents/main.py}
+          (branche \texttt{if strategy\_name == ...}).
+    \item Tester via
+          \texttt{STRATEGY=ma\_strategie python3 -m agents.main}.
+\end{enumerate}
+
+\subsection{Ré-entraînement périodique}
+
+Les marchés évoluent : il est recommandé de
+\textbf{ré-entraîner les agents RL} sur des données
+récentes au moins une fois par mois, en vérifiant la
+non-régression du PnL sur un jeu de validation
+\textit{out-of-sample}.
+
+\subsection{Surveillance en production}
+
+% TODO: Compléter si une procédure de monitoring est
+% mise en place (alertes Slack/mail, seuils de PnL, etc.)
+\begin{itemize}[leftmargin=1.2cm]
+    \item Lire les logs \texttt{dreamer\_train.log} et les
+          CSV \texttt{dqn\_metrics/*.csv}.
+    \item Surveiller la latence de l'API Binance.
+    \item Conserver les checkpoints
+          \texttt{models/*.pth} versionnés.
+\end{itemize}
+
+\subsection{Tests de non-régression}
+
+\begin{lstlisting}[language=bash]
+./build/OrderBookTests          # tests fonctionnels et perf C++
+python3 test_dqn_manual.py      # validation actions DQN
+python3 test_sma_manual.py      # validation SMA
+\end{lstlisting}
+
+% ===============================================================
+\section{Conclusion}
+\label{sec:conclusion}
+% ===============================================================
+
+Ce projet démontre la faisabilité d'une plateforme de
+trading complète associant un \textbf{moteur de carnet
+d'ordres en C++20 performant} ($O(\log n)$ insertion,
+$O(1)$ annulation, latences microsecondes), une
+\textbf{ingestion temps réel} de données Binance, une
+\textbf{collection d'agents de trading} couvrant à la
+fois les heuristiques classiques (mean reversion, RSI,
+Bollinger) et les méthodes d'apprentissage par
+renforcement modernes (DQN, A2C, PPO, Dreamer~v3),
+et enfin un \textbf{tableau de bord} pour la
+visualisation.
+
+Les expérimentations ont validé les exigences de
+performance du moteur, ainsi que la convergence des
+agents sur les jeux de données utilisés. Les pistes
+d'extension naturelles concernent l'enrichissement de
+l'espace d'état (\textit{order flow imbalance},
+profondeur multi-niveaux), l'introduction de
+\textit{rewards} à risque ajusté, et un protocole de
+\textit{walk-forward validation} systématique pour
+mieux capturer la non-stationnarité des marchés crypto.
+
+% TODO: ajuster avec un retour personnel / bilan d'apprentissage,
+% remerciements, perspectives.
+
+% ===============================================================
+% Bibliographie -- à compléter
+% ===============================================================
+
+% \begin{thebibliography}{9}
+% \bibitem{dreamerv3} D. Hafner et al., \emph{Mastering Diverse
+%     Domains through World Models}, 2023.
+% \bibitem{ppo} J. Schulman et al., \emph{Proximal Policy
+%     Optimization Algorithms}, 2017.
+% \bibitem{ddqn} H. van Hasselt et al., \emph{Deep Reinforcement
+%     Learning with Double Q-learning}, AAAI, 2016.
+% \end{thebibliography}
+
+\end{document}

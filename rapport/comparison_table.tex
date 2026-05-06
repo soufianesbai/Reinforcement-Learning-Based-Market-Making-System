@@ -1,0 +1,18 @@
+% Tableau généré automatiquement par agents/compute_metrics.py
+% Backtest sur SOLUSDT-aggTrades-2026-02 (6000 bougies, 1000 trades/bougie)
+\begin{center}
+\scriptsize
+\begin{tabularx}{\textwidth}{lrrrX}
+    \toprule
+    \textbf{Stratégie} & \textbf{PnL final (USDT)} & \textbf{Sharpe} & \textbf{Drawdown max} & \textbf{Remarques} \\
+    \midrule
+    Mean Reversion & +56.62 & 0.14 & -82.56 & baseline règles \\
+    RSI & +6.08 & 0.01 & -101.69 & baseline règles \\
+    Bollinger & -108.09 & -0.28 & -157.04 & baseline règles \\
+    DQN & +78.92 & 0.18 & -99.77 & value-based \\
+    A2C & +27.05 & 0.06 & -129.23 & policy-based \\
+    PPO & +42.07 & 0.10 & -117.47 & policy-based stable \\
+    Dreamer v3 & +49.27 & 0.13 & -61.43 & model-based \\
+    \bottomrule
+\end{tabularx}
+\end{center}

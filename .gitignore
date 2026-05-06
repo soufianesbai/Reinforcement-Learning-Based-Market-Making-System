@@ -33,6 +33,20 @@ Thumbs.db
 .vscode/
 .idea/
 
+# LaTeX build artifacts (root only — rapport/ keeps its compiled outputs)
+/*.aux
+/*.log
+/*.nav
+/*.snm
+/*.toc
+/*.vrb
+/*.out
+/*.synctex.gz
+/texput.log
+/presentation.pdf
+/dreamer_train.log
+/dreamer_training_metrics.png
+
 #data/
 data/*
 agents/ppo/models_checkpoints/
