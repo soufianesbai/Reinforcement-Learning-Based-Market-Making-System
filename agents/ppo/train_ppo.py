@@ -80,7 +80,7 @@ class ContinuousBinanceEnv(gym.Env):
 
         self.inventory          = 0
         self.cash               = 0.0
-        self.old_mtm            = 0.0
+        self.old_cash           = 0.0
         self.episode_trades     = 0
         self.episode_inventories = []
 
@@ -122,6 +122,18 @@ class ContinuousBinanceEnv(gym.Env):
         next_low   = self.lows[self.current_step]
         next_close = self.closes[self.current_step]
 
+        #stratégie A 
+        #if next_low <= agent_bid_price and self.inventory < self.max_inventory:
+        #    self.inventory += 1
+        #    self.cash -= agent_bid_price
+        #    self.episode_trades += 1
+#
+        #if next_high >= agent_ask_price and self.inventory > -self.max_inventory:
+        #    self.inventory -= 1
+        #    self.cash += agent_ask_price
+        #    self.episode_trades += 1
+
+        # faire un acaht ou une vente  B
         filled = False
         if np.random.random() < 0.5:
             if next_low <= agent_bid_price and self.inventory < self.max_inventory:
@@ -146,17 +158,14 @@ class ContinuousBinanceEnv(gym.Env):
 
         self.episode_inventories.append(self.inventory)
 
-        mtm    = self.cash + self.inventory * next_close
-        reward = mtm - self.old_mtm
-        self.old_mtm = mtm
+        spread_reward = self.cash - self.old_cash
+        self.old_cash = self.cash
 
-        reward -= 0.0005 * (self.inventory ** 2) * next_close
+        inventory_penalty = 0.0005 * (self.inventory ** 2) * next_close
+        reward = spread_reward - inventory_penalty
 
         self.steps_this_episode += 1
         terminated = self.steps_this_episode >= self.max_steps
-
-        if terminated and self.inventory != 0:
-            reward -= 0.005 * abs(self.inventory) * next_close
 
         reward = np.clip(reward, -10.0, 10.0)
 
@@ -197,7 +206,7 @@ class ValueNetwork(nn.Module):
 class PPOAgent:
     def __init__(self, env, policy_network, value_network,
                  learning_rate=3e-4, gamma=0.99, clip_range=0.2,
-                 epochs=30, batch_size=256, lambda_=0.95, entropy_coeff=0.01):
+                 epochs=10, batch_size=256, lambda_=0.95, entropy_coeff=0.01):
         self.env            = env
         self.policy_network = policy_network
         self.value_network  = value_network
@@ -348,7 +357,7 @@ if __name__ == "__main__":
     device   = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}")
 
-    env       = ContinuousBinanceEnv(csv_file, volume_threshold=100)
+    env       = ContinuousBinanceEnv(csv_file, volume_threshold=1000)
     input_dim = env.observation_space.shape[0]
 
     policy_net = PolicyNetwork(input_dim).to(device)
@@ -481,6 +490,6 @@ if __name__ == "__main__":
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig("courbe_apprentissage.png", dpi=150, bbox_inches="tight")
+    plt.savefig("courbe_apprentissage_B.png", dpi=150, bbox_inches="tight")
     print("Courbes sauvegardées sous 'courbe_apprentissage.png'")
     plt.show()
