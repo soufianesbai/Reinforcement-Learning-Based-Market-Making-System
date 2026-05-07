@@ -3,7 +3,6 @@
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
-Makefile
 CTestTestfile.cmake
 Testing/
 compile_commands.json
