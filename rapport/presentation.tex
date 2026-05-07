@@ -6,7 +6,6 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[french]{babel}
-\usepackage{lmodern}
 \usepackage{graphicx}
 \graphicspath{{figures/}{rapport/figures/}}
 \PassOptionsToPackage{dvipsnames}{xcolor}
@@ -71,16 +70,16 @@
             \item Architecture globale
             \item Moteur C++ (matching, types d'ordres)
             \item Pipeline Binance (données temps réel)
-            \item \alert{Dashboard} (monitoring + auth)
         \end{enumerate}
         \column{0.5\textwidth}
         \textbf{\color{enseirbblue}Stratégies \& Résultats}
-        \begin{enumerate}\setcounter{enumi}{5}
+        \begin{enumerate}\setcounter{enumi}{4}
             \item Stratégies par règles
             \item Agents RL (DQN, A2C, PPO)
             \item Dreamer~v3 (model-based)
-            \item \alert{SAC} (market making RL)
-            \item Comparaison \& conclusion
+            \item \alert{SAC} (market making off-policy)
+            \item \alert{Dashboard} (monitoring + auth)
+            \item Bilan \& perspectives
         \end{enumerate}
     \end{columns}
 \end{frame}
@@ -157,24 +156,18 @@
         \node[cppbox, right=of live]    (engine) {\textbf{Moteur C++} \\ \tiny matching};
 
         \node[databox, below=of live]   (jsonm) {\texttt{market\_state.json}};
-        \node[databox, below=of engine] (jsono) {\texttt{agent\_orders.json}};
 
         \node[pybox, below=of jsonm] (agent) {\textbf{Agent Python}};
-        \node[pybox, below=of jsono] (rl)    {\textbf{RL / Dreamer}};
-        \node[pybox, left=of agent]  (dash)  {\textbf{Dashboard}};
 
         \draw[arr] (binance) -- (live);
         \draw[arr] (live) -- (engine);
         \draw[arr] (engine) -- (jsonm);
         \draw[arr] (jsonm) -- (agent);
-        \draw[arr] (agent) -- (rl);
-        \draw[arr] (rl) -- (jsono);
-        \draw[arr] (jsono) -- (engine);
-        \draw[arr] (jsonm) -- (dash);
+        \draw[arr, dashed] (agent.north west) to[bend left=18] node[above, font=\tiny] {API directe} (binance.south);
     \end{tikzpicture}
 
     \vspace{0.3cm}
-    \alert{Découplage par fichiers JSON} : composants C++ et Python relancés indépendamment.
+    \alert{Chaîne simplifiée} : l'Agent Python interagit directement avec l'API Binance, tandis que le moteur C++ traite le flux marché.
 \end{frame}
 
 % ===============================================================
@@ -243,16 +236,15 @@
 
 % --- Slide 8 : Structures de données et complexité
 \begin{frame}{Structures de données}
-    \begin{columns}[T]
-        \column{0.5\textwidth}
         \footnotesize
-        \begin{itemize}
-            \item Deux \texttt{std::map} séparées (bids \alert{$\downarrow$}, asks \alert{$\uparrow$})
-            \item Niveau de prix : \texttt{std::list} (FIFO)
-            \item \texttt{unordered\_map<id, iter>} : annulation \alert{$O(1)$}
-        \end{itemize}
+        \begin{tabular}{@{}l@{}}
+            \texttt{std::map<Price, OrderPointers, std::greater<Price>> bids\_;}\\
+            \texttt{std::map<Price, OrderPointers, std::less<Price>>    asks\_;}\\
+            \texttt{std::unordered\_map<OrderId, OrderEntry>             orders\_;}
+        \end{tabular}
 
-        \column{0.5\textwidth}
+    \vspace{0.4cm}
+        \begin{center}
         \scriptsize
         \begin{tabular}{lll}
             \toprule
@@ -264,13 +256,7 @@
             Matching      & $O(k\log n)$ & $\approx 350$\,k/s \\
             \bottomrule
         \end{tabular}
-    \end{columns}
-
-    \vspace{0.3cm}
-    \begin{block}{Performances mesurées}
-        Latence \alert{2--4\,$\mu$s} sur matériel de développement standard.\\
-        Cible $\geq 10^5$ ops/s : \textbf{atteinte}.
-    \end{block}
+        \end{center}
 \end{frame}
 
 % --- Slide 9 : Types d'ordres
@@ -282,15 +268,13 @@
                      minimum width=2.5cm, minimum height=1.4cm, align=center}
     ]
         \node[type] (gtc) at (0,0) {\textbf{GoodTillCancel} \\ \tiny actif jusqu'à \\ \tiny annulation};
-        \node[type] (mkt) at (3,0) {\textbf{Market} \\ \tiny limit \\ \tiny agressif};
-        \node[type] (ioc) at (6,0) {\textbf{IOC} \\ \tiny exéc. partielle, \\ \tiny reste annulé};
-        \node[type] (fok) at (9,0) {\textbf{FillOrKill} \\ \tiny tout ou \\ \tiny rien};
+        \node[type] (fok) at (6,0) {\textbf{FillOrKill} \\ \tiny tout ou \\ \tiny rien};
         \node[type] (gfd) at (12,0) {\textbf{GoodForDay} \\ \tiny expire \\ \tiny à 15:59};
     \end{tikzpicture}
 
     \vspace{0.6cm}
     \begin{block}{Tests fonctionnels}
-        Suite \texttt{OrderBookTests} couvre les 5 types : insertion, annulation, modification, exécution partielle, rejet \texttt{FillOrKill}, expiration \texttt{GFD}.
+        Suite \texttt{OrderBookTests} couvre les 5 types : insertion, annulation, modification, exécution partielle.
     \end{block}
 \end{frame}
 
@@ -339,113 +323,93 @@
 % PARTIE 5 -- Dashboard
 % ===============================================================
 
-% --- Slide 11 : Dashboard -- Interface
-\begin{frame}{Dashboard -- Interface temps réel}
-    \begin{columns}[T]
-        \column{0.52\textwidth}
-        \footnotesize
-        \begin{block}{Composants UI}
-            \begin{itemize}
-                \item \alert{Chandelier} LightweightCharts (2~s)
-                \item \alert{Carnet d'ordres} live -- 8 niveaux bid/ask
-                \item \alert{Courbe PnL} SVG -- $\Delta$ équité
-                \item \alert{Badge décision} BUY / SELL / HOLD
-                \item \alert{Barre inventaire} -- risque coloré
-                \item \alert{Logs} Agent / Market / Erreurs
-            \end{itemize}
-        \end{block}
-        \vspace{0.2cm}
-        \begin{block}{Contrôles}
-            \begin{itemize}
-                \item Sélection \alert{agent} \& \alert{paire} à chaud
-                \item Redémarrage auto si simulation active
-                \item \alert{Authentification}
-            \end{itemize}
-        \end{block}
-
-    \end{columns}
-\end{frame}
-
-% --- Slide 12 : Dashboard -- Architecture
-\begin{frame}{Dashboard -- Architecture découplée}
-    \centering
-    \begin{tikzpicture}[
-        node distance=0.5cm and 1.2cm,
-        every node/.style={font=\footnotesize},
-        proc/.style={draw, rounded corners, fill=enseirbblue!20,
-                     minimum width=2.8cm, minimum height=0.85cm, align=center},
-        file/.style={draw, rounded corners, fill=gray!20,
-                     minimum width=2.8cm, minimum height=0.75cm,
-                     align=center, dashed},
-        ui/.style={draw, rounded corners, fill=enseirbaccent!20,
-                   minimum width=2.8cm, minimum height=0.85cm, align=center},
-        arr/.style={->, thick, >=stealth}
-    ]
-        \node[proc] (market) {\textbf{LiveMarketData}\\\tiny C++ / libcurl};
-        \node[proc, right=2.2cm of market] (agent)
-              {\textbf{Agent Python}\\\tiny stratégie RL};
-
-        \node[file, below=0.7cm of market] (mstate)
-              {\texttt{market\_state.json}};
-        \node[file, below=0.7cm of agent]  (alog)
-              {\texttt{dashboard\_agent.log}};
-
-        \node[proc, below=1.4cm of mstate, xshift=1.3cm] (srv)
-              {\textbf{server.py}\\\tiny ThreadingHTTPServer};
-        \node[ui, left=1.8cm of srv] (browser)
-              {\textbf{Navigateur}\\\tiny HTML / CSS / JS};
-
-        \draw[arr] (market) -- (mstate);
-        \draw[arr] (agent)  -- (alog);
-        \draw[arr] (mstate) -- (srv);
-        \draw[arr] (alog)   -- (srv);
-        \draw[arr, <->] (browser) --
-              node[above]{\tiny HTTP / JSON} (srv);
-    \end{tikzpicture}
-
-    \vspace{0.3cm}
-    \begin{columns}[T]
-        \column{0.5\textwidth}
-        \begin{block}{Principe clé}
-            \alert{Observateur pur} -- le dashboard ne bloque
-            jamais l'agent. Zéro latence ajoutée au trading.
-        \end{block}
-    \end{columns}
-\end{frame}
-
 % ===============================================================
 % PARTIE 6 -- Stratégies par règles
 % ===============================================================
 
 % --- Slide 13 : Mean Reversion (visuel)
 \begin{frame}{Stratégie : Mean Reversion}
-    \centering
-    \includegraphics[width=0.78\textwidth]{indic_meanrev.png}
-
-    \vspace{-0.2cm}
-    \footnotesize
-    \alert{ACHAT} si prix $<$ SMA$-2\%$ \quad $|$ \quad \alert{VENTE} si prix $>$ SMA$+2\%$
-\end{frame}
-
-% --- Slide 12 : RSI (visuel)
-\begin{frame}{Stratégie : RSI (14)}
-    \centering
-    \includegraphics[width=0.7\textwidth]{indic_rsi.png}
-
-    \vspace{-0.1cm}
-    \footnotesize
-    Oscillateur de momentum : $\text{RSI}<30$ $\rightarrow$ acheter ; $\text{RSI}>70$ $\rightarrow$ vendre.
+    \begin{columns}[T]
+        \column{0.6\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{indic_meanrev.png}
+        
+        \column{0.4\textwidth}
+        \footnotesize
+        \textbf{Formules}
+        \begin{block}{SMA}
+            \[
+                \mathrm{SMA}_n(t) = \frac{1}{n} \sum_{i=0}^{n-1} P_{t-i}
+            \]
+        \end{block}
+        
+        \begin{block}{Signal}
+            \[
+                \begin{cases}
+                \text{BUY} & P_t < \mathrm{SMA}_n - 2\% \\
+                \text{SELL} & P_t > \mathrm{SMA}_n + 2\%
+                \end{cases}
+            \]
+        \end{block}
+    \end{columns}
 \end{frame}
 
 % --- Slide 13 : Bollinger (visuel)
 \begin{frame}{Stratégie : Bollinger Bands}
-    \centering
-    \includegraphics[width=0.78\textwidth]{indic_bollinger.png}
-
-    \vspace{-0.1cm}
-    \footnotesize
-    Bandes à $\pm 2\sigma$ : largeur $\propto$ volatilité, sortie de bande = signal.
+    \begin{columns}[T]
+        \column{0.6\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{indic_bollinger.png}
+        
+        \column{0.4\textwidth}
+        \footnotesize
+        \textbf{Formules}
+        \begin{block}{Écart-type}
+            \[
+                \sigma_n(t) = \sqrt{\frac{1}{n} \sum_{i=0}^{n-1} (P_{t-i} - \mathrm{SMA}_n)^2}
+            \]
+        \end{block}
+        
+        \begin{block}{Signal}
+            \[
+                \begin{cases}
+                \text{BUY} & P_t < \mathrm{SMA}_n - 2\sigma_n \\
+                \text{SELL} & P_t > \mathrm{SMA}_n + 2\sigma_n
+                \end{cases}
+            \]
+        \end{block}
+    \end{columns}
 \end{frame}
+
+
+% --- Slide 12 : RSI (visuel)
+\begin{frame}{Stratégie : RSI (Relative Strength Index)}
+    \begin{columns}[T]
+        \column{0.6\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{indic_rsi.png}
+        
+        \column{0.4\textwidth}
+        \footnotesize
+        \textbf{Formules}
+        \begin{block}{RSI}
+            \[
+                \mathrm{RSI}_n = 100 - \frac{100}{1 + RS}
+            \]
+            où $RS = \frac{\text{gain}}{\text{perte}}$
+        \end{block}
+        
+        \begin{block}{Signal}
+            \[
+                \begin{cases}
+                \text{BUY} & \mathrm{RSI} < 30 \\
+                \text{SELL} & \mathrm{RSI} > 70
+                \end{cases}
+            \]
+        \end{block}
+    \end{columns}
+\end{frame}
+
 
 % ===============================================================
 % PARTIE 5 -- RL classique
@@ -646,7 +610,7 @@ Pénalise \textit{hold} passif
 
     \begin{figure}[H]
         \centering
-        \includegraphics[width=0.6\textwidth]{figures/Advantage-Actor-Critic-A2C-architecture.png}
+        \includegraphics[width=0.6\textwidth]{Advantage-Actor-Critic-A2C-architecture.png}
         \caption{Principe général de l'architecture Actor-Critic utilisée pour A2C.}
         \label{fig:a2c_architecture}
     \end{figure}
@@ -695,81 +659,6 @@ Pénalise \textit{hold} passif
 % ===============================================================
 % PARTIE SAC -- Soft Actor-Critic (Market Making)
 % ===============================================================
-
-% --- Slide SAC 1 : Architecture & concept market making
-\begin{frame}{SAC -- Market Making adaptatif}
-    \begin{columns}[T]
-        \column{0.48\textwidth}
-        \textbf{\color{enseirbblue}Différence vs DQN / A2C}
-        \begin{itemize}
-            \item Action \alert{continue} : $(b_s,\,a_s)\!\in\![0,\,0.5\%]^2$
-            \item Pas de pari directionnel
-            \item Capturer le spread des \alert{deux côtés}
-        \end{itemize}
-
-        \vspace{0.25cm}
-        \textbf{\color{enseirbblue}Reward Avellaneda-Stoikov}
-        \[
-          r = \underbrace{\Delta\!mid \times qty}_{\text{spread capturé}}
-            - \lambda\,\frac{I^2}{\sigma}
-            - \lambda_{adv}\,\delta_{adv}
-        \]
-
-        \vspace{0.2cm}
-        \footnotesize
-        \begin{tabular}{ll}
-            \alert{Twin Q-net} & anti-surestimation \\
-            \alert{$\alpha=0.2$ fixe} & entropie contrôlée \\
-            \alert{Buffer 500k} & off-policy stable \\
-            \alert{$\tau=0.005$} & soft target update \\
-        \end{tabular}
-
-    \end{columns}
-\end{frame}
-
-% --- Slide SAC 2 : Courbes d'apprentissage
-\begin{frame}{SAC -- Courbes d'apprentissage}
-    \centering
-    \includegraphics[width=0.95\textwidth,height=0.8\textheight,keepaspectratio]{sac_train_curves.png}
-
-    \vspace{0.1cm}
-    \footnotesize
-    Meilleur checkpoint ep.~\alert{130} \;|\;
-    Val reward \alert{340.42} \;|\;
-    Early stop ep.~230 (patience 100, 2500 max)
-\end{frame}
-
-% --- Slide SAC 3 : Évaluation multi-seed
-\begin{frame}{SAC -- Évaluation (5 seeds $\times$ 50 épisodes, test set BTCUSDT)}
-    \begin{columns}[T]
-        \column{0.54\textwidth}
-        \centering
-        \includegraphics[width=\textwidth,height=0.65\textheight,keepaspectratio]{sac_eval.png}
-
-        \column{0.46\textwidth}
-        \begin{block}{Résultats clés}
-            \begin{itemize}
-                \item \alert{Mean R} $= 160.68 \pm 4.86$
-                \item \alert{Sharpe} $= 8.82 \pm 0.82$
-                \item MaxDD $= 7.09 \pm 10\%$
-                \item Fill rate $= 18.3\%$
-            \end{itemize}
-        \end{block}
-
-        \vspace{0.2cm}
-        \scriptsize
-        \begin{tabular}{lrr}
-            \toprule
-            \textbf{Politique} & \textbf{Mean R} & \textbf{Sharpe} \\
-            \midrule
-            \alert{SAC}      & \alert{160.68} & \alert{8.82} \\
-            Random           & 84.92          & 6.37 \\
-            Fixed 0.2\%      & 58.06          & 4.62 \\
-            Wide 0.5\%       & 7.11           & 2.59 \\
-            \bottomrule
-        \end{tabular}
-    \end{columns}
-\end{frame}
 
 % --- Slide 20 : PPO -- Politique, Loss, Reward
 \begin{frame}{PPO -- Politique, Loss \& Reward}
@@ -910,6 +799,162 @@ Pénalise \textit{hold} passif
     \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{dreamer_training_metrics.png}
 \end{frame}
 
+% ===============================================================
+% PARTIE -- SAC
+% ===============================================================
+
+% --- Slide 25 : SAC concept
+\begin{frame}{SAC -- Market Making adaptatif}
+    \begin{columns}[T]
+        \column{0.48\textwidth}
+        \textbf{\color{enseirbblue}Différence vs DQN / A2C}
+        \begin{itemize}
+            \item Action \alert{continue} : $(b_s,\,a_s)\!\in\![0,\,0.5\%]^2$
+            \item Pas de pari directionnel
+            \item Capturer le spread des \alert{deux côtés}
+        \end{itemize}
+
+        \vspace{0.25cm}
+        \textbf{\color{enseirbblue}Reward Avellaneda-Stoikov}
+        \[
+          r = \underbrace{\Delta\!mid \times qty}_{\text{spread capturé}}
+            - \lambda\,\frac{I^2}{\sigma}
+            - \lambda_{adv}\,\delta_{adv}
+        \]
+
+        \vspace{0.2cm}
+        \footnotesize
+        \begin{tabular}{ll}
+            \alert{Twin Q-net} & anti-surestimation \\
+            \alert{$\alpha=0.2$ fixe} & entropie contrôlée \\
+            \alert{Buffer 500k} & off-policy stable \\
+            \alert{$\tau=0.005$} & soft target update \\
+        \end{tabular}
+
+    \end{columns}
+\end{frame}
+
+% --- Slide 26 : SAC courbes
+\begin{frame}{SAC -- Courbes d'apprentissage}
+    \centering
+    \includegraphics[width=0.95\textwidth,height=0.8\textheight,keepaspectratio]{sac_train_curves.png}
+
+    \vspace{0.1cm}
+    \footnotesize
+    Meilleur checkpoint ep.~\alert{130} \;|\;
+    Val reward \alert{340.42} \;|\;
+    Early stop ep.~230 (patience 100, 2500 max)
+\end{frame}
+
+% --- Slide 27 : SAC évaluation
+\begin{frame}{SAC -- Évaluation (5 seeds $\times$ 50 épisodes, test set BTCUSDT)}
+    \begin{columns}[T]
+        \column{0.54\textwidth}
+        \centering
+        \includegraphics[width=\textwidth,height=0.65\textheight,keepaspectratio]{sac_eval.png}
+
+        \column{0.46\textwidth}
+        \begin{block}{Résultats clés}
+            \begin{itemize}
+                \item \alert{Mean R} $= 160.68 \pm 4.86$
+                \item \alert{Sharpe} $= 8.82 \pm 0.82$
+                \item MaxDD $= 7.09 \pm 10\%$
+                \item Fill rate $= 18.3\%$
+            \end{itemize}
+        \end{block}
+
+        \vspace{0.2cm}
+        \scriptsize
+        \begin{tabular}{lrr}
+            \toprule
+            \textbf{Politique} & \textbf{Mean R} & \textbf{Sharpe} \\
+            \midrule
+            \alert{SAC}      & \alert{160.68} & \alert{8.82} \\
+            Random           & 84.92          & 6.37 \\
+            Fixed 0.2\%      & 58.06          & 4.62 \\
+            Wide 0.5\%       & 7.11           & 2.59 \\
+            \bottomrule
+        \end{tabular}
+    \end{columns}
+\end{frame}
+
+% ===============================================================
+% PARTIE -- Dashboard (monitoring)
+% ===============================================================
+
+% --- Slide 28 : Dashboard -- Interface
+\begin{frame}{Dashboard -- Interface temps réel}
+    \begin{columns}[T]
+        \column{0.52\textwidth}
+        \footnotesize
+        \begin{block}{Composants UI}
+            \begin{itemize}
+                \item \alert{Chandelier} LightweightCharts (2~s)
+                \item \alert{Carnet d'ordres} live -- 8 niveaux bid/ask
+                \item \alert{Courbe PnL} SVG -- $\Delta$ équité
+                \item \alert{Badge décision} BUY / SELL / HOLD
+                \item \alert{Barre inventaire} -- risque coloré
+                \item \alert{Logs} Agent / Market / Erreurs
+            \end{itemize}
+        \end{block}
+        \vspace{0.2cm}
+        \begin{block}{Contrôles}
+            \begin{itemize}
+                \item Sélection \alert{agent} \& \alert{paire} à chaud
+                \item Redémarrage auto si simulation active
+                \item \alert{Authentification}
+            \end{itemize}
+        \end{block}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Dashboard -- Architecture découplée}
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.5cm and 1.2cm,
+        every node/.style={font=\footnotesize},
+        proc/.style={draw, rounded corners, fill=enseirbblue!20,
+                     minimum width=2.8cm, minimum height=0.85cm, align=center},
+        file/.style={draw, rounded corners, fill=gray!20,
+                     minimum width=2.8cm, minimum height=0.75cm,
+                     align=center, dashed},
+        ui/.style={draw, rounded corners, fill=enseirbaccent!20,
+                   minimum width=2.8cm, minimum height=0.85cm, align=center},
+        arr/.style={->, thick, >=stealth}
+    ]
+        \node[proc] (market) {\textbf{LiveMarketData}\\\tiny C++ / libcurl};
+        \node[proc, right=2.2cm of market] (agent)
+              {\textbf{Agent Python}\\\tiny stratégie RL};
+
+        \node[file, below=0.7cm of market] (mstate)
+              {\texttt{market\_state.json}};
+        \node[file, below=0.7cm of agent]  (alog)
+              {\texttt{dashboard\_agent.log}};
+
+        \node[proc, below=1.4cm of mstate, xshift=1.3cm] (srv)
+              {\textbf{server.py}\\\tiny ThreadingHTTPServer};
+        \node[ui, left=1.8cm of srv] (browser)
+              {\textbf{Navigateur}\\\tiny HTML / CSS / JS};
+
+        \draw[arr] (market) -- (mstate);
+        \draw[arr] (agent)  -- (alog);
+        \draw[arr] (mstate) -- (srv);
+        \draw[arr] (alog)   -- (srv);
+        \draw[arr, <->] (browser) --
+              node[above]{\tiny HTTP / JSON} (srv);
+    \end{tikzpicture}
+
+    \vspace{0.3cm}
+    \begin{columns}[T]
+        \column{0.5\textwidth}
+        \begin{block}{Principe clé}
+            \alert{Observateur pur} -- le dashboard ne bloque
+            jamais l'agent. Zéro latence ajoutée au trading.
+        \end{block}
+    \end{columns}
+\end{frame}
+
+% --- Slide 30 : Bilan
 \begin{frame}{Bilan \& perspectives}
     \begin{columns}[T]
         \column{0.5\textwidth}
