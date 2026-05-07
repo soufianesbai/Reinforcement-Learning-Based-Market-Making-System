@@ -70,16 +70,16 @@
             \item Architecture globale
             \item Moteur C++ (matching, types d'ordres)
             \item Pipeline Binance (données temps réel)
-            \item \alert{Dashboard} (monitoring + auth)
         \end{enumerate}
         \column{0.5\textwidth}
         \textbf{\color{enseirbblue}Stratégies \& Résultats}
-        \begin{enumerate}\setcounter{enumi}{5}
+        \begin{enumerate}\setcounter{enumi}{4}
             \item Stratégies par règles
             \item Agents RL (DQN, A2C, PPO)
             \item Dreamer~v3 (model-based)
             \item \alert{SAC} (market making RL)
-            \item Comparaison \& conclusion
+            \item \alert{Dashboard} (monitoring + auth)
+            \item Bilan \& perspectives
         \end{enumerate}
     \end{columns}
 \end{frame}
@@ -322,80 +322,6 @@
 % ===============================================================
 % PARTIE 5 -- Dashboard
 % ===============================================================
-
-% --- Slide 11 : Dashboard -- Interface
-\begin{frame}{Dashboard -- Interface temps réel}
-    \begin{columns}[T]
-        \column{0.52\textwidth}
-        \footnotesize
-        \begin{block}{Composants UI}
-            \begin{itemize}
-                \item \alert{Chandelier} LightweightCharts (2~s)
-                \item \alert{Carnet d'ordres} live -- 8 niveaux bid/ask
-                \item \alert{Courbe PnL} SVG -- $\Delta$ équité
-                \item \alert{Badge décision} BUY / SELL / HOLD
-                \item \alert{Barre inventaire} -- risque coloré
-                \item \alert{Logs} Agent / Market / Erreurs
-            \end{itemize}
-        \end{block}
-        \vspace{0.2cm}
-        \begin{block}{Contrôles}
-            \begin{itemize}
-                \item Sélection \alert{agent} \& \alert{paire} à chaud
-                \item Redémarrage auto si simulation active
-                \item \alert{Authentification}
-            \end{itemize}
-        \end{block}
-
-    \end{columns}
-\end{frame}
-
-% --- Slide 12 : Dashboard -- Architecture
-\begin{frame}{Dashboard -- Architecture découplée}
-    \centering
-    \begin{tikzpicture}[
-        node distance=0.5cm and 1.2cm,
-        every node/.style={font=\footnotesize},
-        proc/.style={draw, rounded corners, fill=enseirbblue!20,
-                     minimum width=2.8cm, minimum height=0.85cm, align=center},
-        file/.style={draw, rounded corners, fill=gray!20,
-                     minimum width=2.8cm, minimum height=0.75cm,
-                     align=center, dashed},
-        ui/.style={draw, rounded corners, fill=enseirbaccent!20,
-                   minimum width=2.8cm, minimum height=0.85cm, align=center},
-        arr/.style={->, thick, >=stealth}
-    ]
-        \node[proc] (market) {\textbf{LiveMarketData}\\\tiny C++ / libcurl};
-        \node[proc, right=2.2cm of market] (agent)
-              {\textbf{Agent Python}\\\tiny stratégie RL};
-
-        \node[file, below=0.7cm of market] (mstate)
-              {\texttt{market\_state.json}};
-        \node[file, below=0.7cm of agent]  (alog)
-              {\texttt{dashboard\_agent.log}};
-
-        \node[proc, below=1.4cm of mstate, xshift=1.3cm] (srv)
-              {\textbf{server.py}\\\tiny ThreadingHTTPServer};
-        \node[ui, left=1.8cm of srv] (browser)
-              {\textbf{Navigateur}\\\tiny HTML / CSS / JS};
-
-        \draw[arr] (market) -- (mstate);
-        \draw[arr] (agent)  -- (alog);
-        \draw[arr] (mstate) -- (srv);
-        \draw[arr] (alog)   -- (srv);
-        \draw[arr, <->] (browser) --
-              node[above]{\tiny HTTP / JSON} (srv);
-    \end{tikzpicture}
-
-    \vspace{0.3cm}
-    \begin{columns}[T]
-        \column{0.5\textwidth}
-        \begin{block}{Principe clé}
-            \alert{Observateur pur} -- le dashboard ne bloque
-            jamais l'agent. Zéro latence ajoutée au trading.
-        \end{block}
-    \end{columns}
-\end{frame}
 
 % ===============================================================
 % PARTIE 6 -- Stratégies par règles
@@ -941,6 +867,83 @@ Pénalise \textit{hold} passif
     \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{dreamer_training_metrics.png}
 \end{frame}
 
+% ===============================================================
+% PARTIE -- Dashboard (monitoring)
+% ===============================================================
+
+% --- Slide 28 : Dashboard -- Interface
+\begin{frame}{Dashboard -- Interface temps réel}
+    \begin{columns}[T]
+        \column{0.52\textwidth}
+        \footnotesize
+        \begin{block}{Composants UI}
+            \begin{itemize}
+                \item \alert{Chandelier} LightweightCharts (2~s)
+                \item \alert{Carnet d'ordres} live -- 8 niveaux bid/ask
+                \item \alert{Courbe PnL} SVG -- $\Delta$ équité
+                \item \alert{Badge décision} BUY / SELL / HOLD
+                \item \alert{Barre inventaire} -- risque coloré
+                \item \alert{Logs} Agent / Market / Erreurs
+            \end{itemize}
+        \end{block}
+        \vspace{0.2cm}
+        \begin{block}{Contrôles}
+            \begin{itemize}
+                \item Sélection \alert{agent} \& \alert{paire} à chaud
+                \item Redémarrage auto si simulation active
+                \item \alert{Authentification}
+            \end{itemize}
+        \end{block}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Dashboard -- Architecture découplée}
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.5cm and 1.2cm,
+        every node/.style={font=\footnotesize},
+        proc/.style={draw, rounded corners, fill=enseirbblue!20,
+                     minimum width=2.8cm, minimum height=0.85cm, align=center},
+        file/.style={draw, rounded corners, fill=gray!20,
+                     minimum width=2.8cm, minimum height=0.75cm,
+                     align=center, dashed},
+        ui/.style={draw, rounded corners, fill=enseirbaccent!20,
+                   minimum width=2.8cm, minimum height=0.85cm, align=center},
+        arr/.style={->, thick, >=stealth}
+    ]
+        \node[proc] (market) {\textbf{LiveMarketData}\\\tiny C++ / libcurl};
+        \node[proc, right=2.2cm of market] (agent)
+              {\textbf{Agent Python}\\\tiny stratégie RL};
+
+        \node[file, below=0.7cm of market] (mstate)
+              {\texttt{market\_state.json}};
+        \node[file, below=0.7cm of agent]  (alog)
+              {\texttt{dashboard\_agent.log}};
+
+        \node[proc, below=1.4cm of mstate, xshift=1.3cm] (srv)
+              {\textbf{server.py}\\\tiny ThreadingHTTPServer};
+        \node[ui, left=1.8cm of srv] (browser)
+              {\textbf{Navigateur}\\\tiny HTML / CSS / JS};
+
+        \draw[arr] (market) -- (mstate);
+        \draw[arr] (agent)  -- (alog);
+        \draw[arr] (mstate) -- (srv);
+        \draw[arr] (alog)   -- (srv);
+        \draw[arr, <->] (browser) --
+              node[above]{\tiny HTTP / JSON} (srv);
+    \end{tikzpicture}
+
+    \vspace{0.3cm}
+    \begin{columns}[T]
+        \column{0.5\textwidth}
+        \begin{block}{Principe clé}
+            \alert{Observateur pur} -- le dashboard ne bloque
+            jamais l'agent. Zéro latence ajoutée au trading.
+        \end{block}
+    \end{columns}
+\end{frame}
+
+% --- Slide 30 : Bilan
 \begin{frame}{Bilan \& perspectives}
     \begin{columns}[T]
         \column{0.5\textwidth}

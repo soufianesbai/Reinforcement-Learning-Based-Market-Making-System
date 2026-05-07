@@ -81,12 +81,41 @@ body {
 }
 
 
+.dashboard-main {
+  display: flex;
+  flex-direction: column;
+}
+
 .dashboard-grid {
-  padding: 18px;
+  padding: 18px 18px 0 18px;
   display: grid;
   gap: 16px;
   grid-template-columns: 1fr 320px;
   align-items: start;
+}
+
+.logs-bottom {
+  padding: 16px 18px 18px 18px;
+}
+
+.logs-bottom-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.logs-trade-card,
+.logs-system-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow: hidden;
+}
+
+.logs-trade-card .trade-log-wrap,
+.logs-system-card .system-log-view {
+  flex: 1;
+  overflow-y: auto;
 }
 
 /* ── Stat Cards ───────────────────────────────────────────── */

@@ -207,33 +207,43 @@ window.MarketMindComponents = (function () {
           <div class="detail-grid" id="detail-grid"></div>
         </div>
 
-        <h3 class="sub-title">Trade Log</h3>
-        <div class="trade-log-wrap">
-          <table class="log-table">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Action</th>
-                <th>Qty</th>
-                <th>Price</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody id="trade-log-body"></tbody>
-          </table>
-        </div>
-        <div class="system-logs">
-          <div class="system-logs-header">
-            <h3 class="sub-title">System Logs</h3>
-            <div class="log-tabs" id="system-log-tabs">
-              <button class="log-tab active" data-log-tab="agent">Agent</button>
-              <button class="log-tab" data-log-tab="market">Market</button>
-              <button class="log-tab" data-log-tab="error">Errors</button>
+      </section>
+    `;
+  }
+
+  function logsSection() {
+    return `
+      <section class="logs-bottom">
+        <div class="logs-bottom-inner">
+          <div class="card logs-trade-card">
+            <h3 class="sub-title">Trade Log</h3>
+            <div class="trade-log-wrap">
+              <table class="log-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Action</th>
+                    <th>Qty</th>
+                    <th>Price</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody id="trade-log-body"></tbody>
+              </table>
             </div>
           </div>
-          <div id="system-log-view" class="system-log-view"></div>
+          <div class="card logs-system-card">
+            <div class="system-logs-header">
+              <h3 class="sub-title">System Logs</h3>
+              <div class="log-tabs" id="system-log-tabs">
+                <button class="log-tab active" data-log-tab="agent">Agent</button>
+                <button class="log-tab" data-log-tab="market">Market</button>
+                <button class="log-tab" data-log-tab="error">Errors</button>
+              </div>
+            </div>
+            <div id="system-log-view" class="system-log-view"></div>
+          </div>
         </div>
-
       </section>
     `;
   }
@@ -246,5 +256,6 @@ window.MarketMindComponents = (function () {
     chartCard,
     pnlCard,
     rightPanel,
+    logsSection,
   };
 })();
