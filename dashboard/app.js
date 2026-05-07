@@ -16,17 +16,19 @@
     app.innerHTML = `
       <div class="app-shell">
         ${C.topbar()}
-        <main class="dashboard-grid">
-          <section class="main-content">
-            ${C.statCards()}
-            <div class="top-cards">
-              ${C.orderBookCard(state.orderBook)}
-              ${C.chartCard()}
-            </div>
-            ${C.pnlCard()}
-          </section>
-
-          ${C.rightPanel(state.products, state.agents)}
+        <main class="dashboard-main">
+          <div class="dashboard-grid">
+            <section class="main-content">
+              ${C.statCards()}
+              <div class="top-cards">
+                ${C.orderBookCard(state.orderBook)}
+                ${C.chartCard()}
+              </div>
+              ${C.pnlCard()}
+            </section>
+            ${C.rightPanel(state.products, state.agents)}
+          </div>
+          ${C.logsSection()}
         </main>
       </div>
     `;
