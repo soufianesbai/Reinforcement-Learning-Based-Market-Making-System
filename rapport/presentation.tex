@@ -77,7 +77,7 @@
             \item Stratégies par règles
             \item Agents RL (DQN, A2C, PPO)
             \item Dreamer~v3 (model-based)
-            \item \alert{SAC} (market making RL)
+            \item \alert{SAC} (market making off-policy)
             \item \alert{Dashboard} (monitoring + auth)
             \item Bilan \& perspectives
         \end{enumerate}
@@ -653,81 +653,6 @@ Pénalise \textit{hold} passif
 % PARTIE SAC -- Soft Actor-Critic (Market Making)
 % ===============================================================
 
-% --- Slide SAC 1 : Architecture & concept market making
-\begin{frame}{SAC -- Market Making adaptatif}
-    \begin{columns}[T]
-        \column{0.48\textwidth}
-        \textbf{\color{enseirbblue}Différence vs DQN / A2C}
-        \begin{itemize}
-            \item Action \alert{continue} : $(b_s,\,a_s)\!\in\![0,\,0.5\%]^2$
-            \item Pas de pari directionnel
-            \item Capturer le spread des \alert{deux côtés}
-        \end{itemize}
-
-        \vspace{0.25cm}
-        \textbf{\color{enseirbblue}Reward Avellaneda-Stoikov}
-        \[
-          r = \underbrace{\Delta\!mid \times qty}_{\text{spread capturé}}
-            - \lambda\,\frac{I^2}{\sigma}
-            - \lambda_{adv}\,\delta_{adv}
-        \]
-
-        \vspace{0.2cm}
-        \footnotesize
-        \begin{tabular}{ll}
-            \alert{Twin Q-net} & anti-surestimation \\
-            \alert{$\alpha=0.2$ fixe} & entropie contrôlée \\
-            \alert{Buffer 500k} & off-policy stable \\
-            \alert{$\tau=0.005$} & soft target update \\
-        \end{tabular}
-
-    \end{columns}
-\end{frame}
-
-% --- Slide SAC 2 : Courbes d'apprentissage
-\begin{frame}{SAC -- Courbes d'apprentissage}
-    \centering
-    \includegraphics[width=0.95\textwidth,height=0.8\textheight,keepaspectratio]{sac_train_curves.png}
-
-    \vspace{0.1cm}
-    \footnotesize
-    Meilleur checkpoint ep.~\alert{130} \;|\;
-    Val reward \alert{340.42} \;|\;
-    Early stop ep.~230 (patience 100, 2500 max)
-\end{frame}
-
-% --- Slide SAC 3 : Évaluation multi-seed
-\begin{frame}{SAC -- Évaluation (5 seeds $\times$ 50 épisodes, test set BTCUSDT)}
-    \begin{columns}[T]
-        \column{0.54\textwidth}
-        \centering
-        \includegraphics[width=\textwidth,height=0.65\textheight,keepaspectratio]{sac_eval.png}
-
-        \column{0.46\textwidth}
-        \begin{block}{Résultats clés}
-            \begin{itemize}
-                \item \alert{Mean R} $= 160.68 \pm 4.86$
-                \item \alert{Sharpe} $= 8.82 \pm 0.82$
-                \item MaxDD $= 7.09 \pm 10\%$
-                \item Fill rate $= 18.3\%$
-            \end{itemize}
-        \end{block}
-
-        \vspace{0.2cm}
-        \scriptsize
-        \begin{tabular}{lrr}
-            \toprule
-            \textbf{Politique} & \textbf{Mean R} & \textbf{Sharpe} \\
-            \midrule
-            \alert{SAC}      & \alert{160.68} & \alert{8.82} \\
-            Random           & 84.92          & 6.37 \\
-            Fixed 0.2\%      & 58.06          & 4.62 \\
-            Wide 0.5\%       & 7.11           & 2.59 \\
-            \bottomrule
-        \end{tabular}
-    \end{columns}
-\end{frame}
-
 % --- Slide 20 : PPO -- Politique, Loss, Reward
 \begin{frame}{PPO -- Politique, Loss \& Reward}
     \begin{columns}[T]
@@ -865,6 +790,85 @@ Pénalise \textit{hold} passif
 \begin{frame}{Dreamer v3 -- Apprentissage}
     \centering
     \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{dreamer_training_metrics.png}
+\end{frame}
+
+% ===============================================================
+% PARTIE -- SAC
+% ===============================================================
+
+% --- Slide 25 : SAC concept
+\begin{frame}{SAC -- Market Making adaptatif}
+    \begin{columns}[T]
+        \column{0.48\textwidth}
+        \textbf{\color{enseirbblue}Différence vs DQN / A2C}
+        \begin{itemize}
+            \item Action \alert{continue} : $(b_s,\,a_s)\!\in\![0,\,0.5\%]^2$
+            \item Pas de pari directionnel
+            \item Capturer le spread des \alert{deux côtés}
+        \end{itemize}
+
+        \vspace{0.25cm}
+        \textbf{\color{enseirbblue}Reward Avellaneda-Stoikov}
+        \[
+          r = \underbrace{\Delta\!mid \times qty}_{\text{spread capturé}}
+            - \lambda\,\frac{I^2}{\sigma}
+            - \lambda_{adv}\,\delta_{adv}
+        \]
+
+        \vspace{0.2cm}
+        \footnotesize
+        \begin{tabular}{ll}
+            \alert{Twin Q-net} & anti-surestimation \\
+            \alert{$\alpha=0.2$ fixe} & entropie contrôlée \\
+            \alert{Buffer 500k} & off-policy stable \\
+            \alert{$\tau=0.005$} & soft target update \\
+        \end{tabular}
+
+    \end{columns}
+\end{frame}
+
+% --- Slide 26 : SAC courbes
+\begin{frame}{SAC -- Courbes d'apprentissage}
+    \centering
+    \includegraphics[width=0.95\textwidth,height=0.8\textheight,keepaspectratio]{sac_train_curves.png}
+
+    \vspace{0.1cm}
+    \footnotesize
+    Meilleur checkpoint ep.~\alert{130} \;|\;
+    Val reward \alert{340.42} \;|\;
+    Early stop ep.~230 (patience 100, 2500 max)
+\end{frame}
+
+% --- Slide 27 : SAC évaluation
+\begin{frame}{SAC -- Évaluation (5 seeds $\times$ 50 épisodes, test set BTCUSDT)}
+    \begin{columns}[T]
+        \column{0.54\textwidth}
+        \centering
+        \includegraphics[width=\textwidth,height=0.65\textheight,keepaspectratio]{sac_eval.png}
+
+        \column{0.46\textwidth}
+        \begin{block}{Résultats clés}
+            \begin{itemize}
+                \item \alert{Mean R} $= 160.68 \pm 4.86$
+                \item \alert{Sharpe} $= 8.82 \pm 0.82$
+                \item MaxDD $= 7.09 \pm 10\%$
+                \item Fill rate $= 18.3\%$
+            \end{itemize}
+        \end{block}
+
+        \vspace{0.2cm}
+        \scriptsize
+        \begin{tabular}{lrr}
+            \toprule
+            \textbf{Politique} & \textbf{Mean R} & \textbf{Sharpe} \\
+            \midrule
+            \alert{SAC}      & \alert{160.68} & \alert{8.82} \\
+            Random           & 84.92          & 6.37 \\
+            Fixed 0.2\%      & 58.06          & 4.62 \\
+            Wide 0.5\%       & 7.11           & 2.59 \\
+            \bottomrule
+        \end{tabular}
+    \end{columns}
 \end{frame}
 
 % ===============================================================
