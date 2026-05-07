@@ -643,25 +643,6 @@ Pénalise \textit{hold} passif
 % --- Slide 18 : Actor-Critic (schéma)
 \begin{frame}{A2C -- Actor-Critic}
     \centering
-    % \begin{tikzpicture}[
-    %     every node/.style={font=\footnotesize},
-    %     box/.style={draw, rounded corners, minimum width=2cm, minimum height=1cm, align=center},
-    %     arr/.style={->, thick, >=stealth}
-    % ]
-    %     \node[box, fill=gray!20] (s) at (0,0) {État $s$};
-    %     \node[box, fill=enseirbblue!25] (trunk) at (3,0) {Tronc partagé};
-    %     \node[box, fill=enseirbaccent!25] (actor)  at (6.5,1)  {\textbf{Acteur}\\\tiny$\pi(a|s)$};
-    %     \node[box, fill=bidgreen!25]      (critic) at (6.5,-1) {\textbf{Critique}\\\tiny$V(s)$};
-
-    %     \draw[arr] (s) -- (trunk);
-    %     \draw[arr] (trunk) -- (actor);
-    %     \draw[arr] (trunk) -- (critic);
-
-    %     \node[font=\tiny] at (9,1)  {action $a_t$};
-    %     \node[font=\tiny] at (9,-1) {valeur $V_t$};
-    %     \draw[arr] (actor)  -- (9,1);
-    %     \draw[arr] (critic) -- (9,-1);
-    % \end{tikzpicture}
 
     \begin{figure}[H]
         \centering
@@ -676,14 +657,40 @@ Pénalise \textit{hold} passif
         \alert{Avantage} & $A_t = R_t - V(s_t)$ \\
         \alert{$\mathcal{L}_{\text{actor}}$}  & $-\log \pi(a_t|s_t)\, A_t$ \\
         \alert{$\mathcal{L}_{\text{critic}}$} & $(R_t - V(s_t))^2$ \\
-    \end{tabular}
+        \alert{Return} & $R_t = r_t + \gamma R_{t+1}$ \\
+\end{tabular}
 \end{frame}
 
 % --- Slide 19 : A2C courbes
-\begin{frame}{A2C -- Apprentissage}
-    \centering
-    \includegraphics[width=0.9\textwidth,height=0.85\textheight,keepaspectratio]{a2c_training_metrics.png}
+
+\begin{frame}{A2C -- Actor-Critic}
+    \begin{columns}[T,onlytextwidth]
+        \begin{column}{0.62\textwidth}
+            \centering
+            \includegraphics[width=\linewidth]{figures/a2c_training_metrics.png}
+            \label{fig:a2c_architecture}
+        \end{column}
+
+        \begin{column}{0.38\textwidth}
+            \footnotesize
+            \begin{itemize}
+                \item La récompense s'améliore au fil de l'entraînement, mais reste négative.
+    \item La perte du critique diminue, ce qui indique une meilleure estimation de la valeur.
+    \item La politique se stabilise, mais la stratégie n'est pas encore rentable.
+            \end{itemize}
+            \textbf{Hyperparamètres :}
+            \begin{itemize}
+    \item $lr_{actor}$ : $10^{-3}$.
+    \item $lr_{critic}$ : $10^{-3}$.
+    \item $\gamma = 0.99$.
+    \item Nombre d'épisodes d'entraînement : $2000$.
+    \item Coefficient de pénalité d'inventaire : $0.0001$.
+\end{itemize}
+        \end{column}
+    \end{columns}
 \end{frame}
+
+
 
 % ===============================================================
 % PARTIE SAC -- Soft Actor-Critic (Market Making)
