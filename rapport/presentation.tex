@@ -806,7 +806,7 @@ Pénalise \textit{hold} passif
 % --- Slide 25 : SAC concept
 \begin{frame}{SAC -- Market Making adaptatif}
     \begin{columns}[T]
-        \column{0.48\textwidth}
+        \column{0.50\textwidth}
         \textbf{\color{enseirbblue}Différence vs DQN / A2C}
         \begin{itemize}
             \item Action \alert{continue} : $(b_s,\,a_s)\!\in\![0,\,0.5\%]^2$
@@ -814,21 +814,44 @@ Pénalise \textit{hold} passif
             \item Capturer le spread des \alert{deux côtés}
         \end{itemize}
 
-        \vspace{0.25cm}
+        \vspace{0.2cm}
         \textbf{\color{enseirbblue}Reward Avellaneda-Stoikov}
         \[
           r = \underbrace{\Delta\!mid \times qty}_{\text{spread capturé}}
-            - \lambda\,\frac{I^2}{\sigma}
-            - \lambda_{adv}\,\delta_{adv}
+            - \underbrace{\lambda\,\frac{I^2}{\sigma}}_{\text{risque inventaire}}
+            - \underbrace{\lambda_{adv}\,\delta_{adv}}_{\text{sélection adverse}}
         \]
 
-        \vspace{0.2cm}
+        \vspace{0.1cm}
+        \footnotesize
+        \begin{tabular}{ll}
+            $\Delta\!mid \times qty$ & profit sur chaque ordre rempli \\
+            $I$ & inventaire (position accumulée) \\
+            $\sigma$ & volatilité du marché \\
+            $\lambda$ & poids de la pénalité inventaire \\
+            $\delta_{adv}$ & perte due aux traders informés \\
+        \end{tabular}
+
+        \column{0.46\textwidth}
+        \textbf{\color{enseirbblue}Architecture}
+        \vspace{0.1cm}
+
         \footnotesize
         \begin{tabular}{ll}
             \alert{Twin Q-net} & anti-surestimation \\
             \alert{$\alpha=0.2$ fixe} & entropie contrôlée \\
             \alert{Buffer 500k} & off-policy stable \\
             \alert{$\tau=0.005$} & soft target update \\
+        \end{tabular}
+
+        \vspace{0.3cm}
+        \textbf{\color{enseirbblue}Off-policy vs On-policy}
+        \vspace{0.1cm}
+
+        \footnotesize
+        \begin{tabular}{ll}
+            \alert{PPO/A2C} & apprend de l'épisode en cours \\
+            \alert{SAC} & réutilise 500k expériences passées \\
         \end{tabular}
 
     \end{columns}
