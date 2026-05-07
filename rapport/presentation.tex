@@ -6,7 +6,6 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[french]{babel}
-\usepackage{lmodern}
 \usepackage{graphicx}
 \graphicspath{{figures/}{rapport/figures/}}
 \PassOptionsToPackage{dvipsnames}{xcolor}
@@ -157,24 +156,18 @@
         \node[cppbox, right=of live]    (engine) {\textbf{Moteur C++} \\ \tiny matching};
 
         \node[databox, below=of live]   (jsonm) {\texttt{market\_state.json}};
-        \node[databox, below=of engine] (jsono) {\texttt{agent\_orders.json}};
 
         \node[pybox, below=of jsonm] (agent) {\textbf{Agent Python}};
-        \node[pybox, below=of jsono] (rl)    {\textbf{RL / Dreamer}};
-        \node[pybox, left=of agent]  (dash)  {\textbf{Dashboard}};
 
         \draw[arr] (binance) -- (live);
         \draw[arr] (live) -- (engine);
         \draw[arr] (engine) -- (jsonm);
         \draw[arr] (jsonm) -- (agent);
-        \draw[arr] (agent) -- (rl);
-        \draw[arr] (rl) -- (jsono);
-        \draw[arr] (jsono) -- (engine);
-        \draw[arr] (jsonm) -- (dash);
+        \draw[arr, dashed] (agent.north west) to[bend left=18] node[above, font=\tiny] {API directe} (binance.south);
     \end{tikzpicture}
 
     \vspace{0.3cm}
-    \alert{Découplage par fichiers JSON} : composants C++ et Python relancés indépendamment.
+    \alert{Chaîne simplifiée} : l'Agent Python interagit directement avec l'API Binance, tandis que le moteur C++ traite le flux marché.
 \end{frame}
 
 % ===============================================================
@@ -243,16 +236,15 @@
 
 % --- Slide 8 : Structures de données et complexité
 \begin{frame}{Structures de données}
-    \begin{columns}[T]
-        \column{0.5\textwidth}
         \footnotesize
-        \begin{itemize}
-            \item Deux \texttt{std::map} séparées (bids \alert{$\downarrow$}, asks \alert{$\uparrow$})
-            \item Niveau de prix : \texttt{std::list} (FIFO)
-            \item \texttt{unordered\_map<id, iter>} : annulation \alert{$O(1)$}
-        \end{itemize}
+        \begin{tabular}{@{}l@{}}
+            \texttt{std::map<Price, OrderPointers, std::greater<Price>> bids\_;}\\
+            \texttt{std::map<Price, OrderPointers, std::less<Price>>    asks\_;}\\
+            \texttt{std::unordered\_map<OrderId, OrderEntry>             orders\_;}
+        \end{tabular}
 
-        \column{0.5\textwidth}
+    \vspace{0.4cm}
+        \begin{center}
         \scriptsize
         \begin{tabular}{lll}
             \toprule
@@ -264,13 +256,7 @@
             Matching      & $O(k\log n)$ & $\approx 350$\,k/s \\
             \bottomrule
         \end{tabular}
-    \end{columns}
-
-    \vspace{0.3cm}
-    \begin{block}{Performances mesurées}
-        Latence \alert{2--4\,$\mu$s} sur matériel de développement standard.\\
-        Cible $\geq 10^5$ ops/s : \textbf{atteinte}.
-    \end{block}
+        \end{center}
 \end{frame}
 
 % --- Slide 9 : Types d'ordres
@@ -282,15 +268,13 @@
                      minimum width=2.5cm, minimum height=1.4cm, align=center}
     ]
         \node[type] (gtc) at (0,0) {\textbf{GoodTillCancel} \\ \tiny actif jusqu'à \\ \tiny annulation};
-        \node[type] (mkt) at (3,0) {\textbf{Market} \\ \tiny limit \\ \tiny agressif};
-        \node[type] (ioc) at (6,0) {\textbf{IOC} \\ \tiny exéc. partielle, \\ \tiny reste annulé};
-        \node[type] (fok) at (9,0) {\textbf{FillOrKill} \\ \tiny tout ou \\ \tiny rien};
+        \node[type] (fok) at (6,0) {\textbf{FillOrKill} \\ \tiny tout ou \\ \tiny rien};
         \node[type] (gfd) at (12,0) {\textbf{GoodForDay} \\ \tiny expire \\ \tiny à 15:59};
     \end{tikzpicture}
 
     \vspace{0.6cm}
     \begin{block}{Tests fonctionnels}
-        Suite \texttt{OrderBookTests} couvre les 5 types : insertion, annulation, modification, exécution partielle, rejet \texttt{FillOrKill}, expiration \texttt{GFD}.
+        Suite \texttt{OrderBookTests} couvre les 5 types : insertion, annulation, modification, exécution partielle.
     \end{block}
 \end{frame}
 
@@ -419,33 +403,87 @@
 
 % --- Slide 13 : Mean Reversion (visuel)
 \begin{frame}{Stratégie : Mean Reversion}
-    \centering
-    \includegraphics[width=0.78\textwidth]{indic_meanrev.png}
-
-    \vspace{-0.2cm}
-    \footnotesize
-    \alert{ACHAT} si prix $<$ SMA$-2\%$ \quad $|$ \quad \alert{VENTE} si prix $>$ SMA$+2\%$
-\end{frame}
-
-% --- Slide 12 : RSI (visuel)
-\begin{frame}{Stratégie : RSI (14)}
-    \centering
-    \includegraphics[width=0.7\textwidth]{indic_rsi.png}
-
-    \vspace{-0.1cm}
-    \footnotesize
-    Oscillateur de momentum : $\text{RSI}<30$ $\rightarrow$ acheter ; $\text{RSI}>70$ $\rightarrow$ vendre.
+    \begin{columns}[T]
+        \column{0.6\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{indic_meanrev.png}
+        
+        \column{0.4\textwidth}
+        \footnotesize
+        \textbf{Formules}
+        \begin{block}{SMA}
+            \[
+                \mathrm{SMA}_n(t) = \frac{1}{n} \sum_{i=0}^{n-1} P_{t-i}
+            \]
+        \end{block}
+        
+        \begin{block}{Signal}
+            \[
+                \begin{cases}
+                \text{BUY} & P_t < \mathrm{SMA}_n - 2\% \\
+                \text{SELL} & P_t > \mathrm{SMA}_n + 2\%
+                \end{cases}
+            \]
+        \end{block}
+    \end{columns}
 \end{frame}
 
 % --- Slide 13 : Bollinger (visuel)
 \begin{frame}{Stratégie : Bollinger Bands}
-    \centering
-    \includegraphics[width=0.78\textwidth]{indic_bollinger.png}
-
-    \vspace{-0.1cm}
-    \footnotesize
-    Bandes à $\pm 2\sigma$ : largeur $\propto$ volatilité, sortie de bande = signal.
+    \begin{columns}[T]
+        \column{0.6\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{indic_bollinger.png}
+        
+        \column{0.4\textwidth}
+        \footnotesize
+        \textbf{Formules}
+        \begin{block}{Écart-type}
+            \[
+                \sigma_n(t) = \sqrt{\frac{1}{n} \sum_{i=0}^{n-1} (P_{t-i} - \mathrm{SMA}_n)^2}
+            \]
+        \end{block}
+        
+        \begin{block}{Signal}
+            \[
+                \begin{cases}
+                \text{BUY} & P_t < \mathrm{SMA}_n - 2\sigma_n \\
+                \text{SELL} & P_t > \mathrm{SMA}_n + 2\sigma_n
+                \end{cases}
+            \]
+        \end{block}
+    \end{columns}
 \end{frame}
+
+
+% --- Slide 12 : RSI (visuel)
+\begin{frame}{Stratégie : RSI (Relative Strength Index)}
+    \begin{columns}[T]
+        \column{0.6\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{indic_rsi.png}
+        
+        \column{0.4\textwidth}
+        \footnotesize
+        \textbf{Formules}
+        \begin{block}{RSI}
+            \[
+                \mathrm{RSI}_n = 100 - \frac{100}{1 + RS}
+            \]
+            où $RS = \frac{\text{gain}}{\text{perte}}$
+        \end{block}
+        
+        \begin{block}{Signal}
+            \[
+                \begin{cases}
+                \text{BUY} & \mathrm{RSI} < 30 \\
+                \text{SELL} & \mathrm{RSI} > 70
+                \end{cases}
+            \]
+        \end{block}
+    \end{columns}
+\end{frame}
+
 
 % ===============================================================
 % PARTIE 5 -- RL classique
@@ -665,7 +703,7 @@ Pénalise \textit{hold} passif
 
     \begin{figure}[H]
         \centering
-        \includegraphics[width=0.6\textwidth]{figures/Advantage-Actor-Critic-A2C-architecture.png}
+        \includegraphics[width=0.6\textwidth]{Advantage-Actor-Critic-A2C-architecture.png}
         \caption{Principe général de l'architecture Actor-Critic utilisée pour A2C.}
         \label{fig:a2c_architecture}
     \end{figure}
