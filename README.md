@@ -1,210 +1,189 @@
-# Order Book Engine
+# Reinforcement-Learning-Based Market Making System
 
-Moteur de carnet d'ordres haute performance en C++20 avec intégration données de marché temps réel.
+Système de trading et de market making combinant un moteur de carnet d'ordres haute performance en C++20, des agents
+Python (stratégies heuristiques et apprentissage par renforcement) connectés au testnet Binance, et un dashboard web de
+supervision en temps réel.
 
-## Features
+Projet de fin d'année (PFA) 2025–2026 — ENSEIRB-MATMECA.
 
-- **Types d'ordres** : GoodTillCancel, Market, ImmediateOrCancel, FillOrKill, GoodForDay
-- **Algorithme de matching** : Priorité prix-temps (FIFO au sein d'un niveau de prix)
-- **Structures de données** : O(1) recherche, O(log n) accès aux niveaux
-- **Live market data** : Intégration Binance API
+## Vue d'ensemble
 
-## Performance
+```
+ Binance API ──► Moteur C++ (LiveMarketData) ──► data/market_state.json ──► Agent Python (stratégie)
+                        ▲                                                         │
+                        └──────────────── data/agent_orders.json ◄────────────────┘
 
-- Insertion : ~400K ops/sec
-- Annulation : ~2M ops/sec
-- Modification : ~270K ops/sec
-- Latence : 2-4 μs
+ Dashboard (dashboard/server.py) ── lit market_state.json et dashboard_agent.log (observateur passif)
+```
+
+- **Moteur C++** : récupère le carnet d'ordres Binance en temps réel, le reconstruit et exécute les ordres de l'agent
+  avec un matching prix-temps.
+- **Agent Python** : lit l'état du marché, délègue la décision à une stratégie interchangeable et envoie ses ordres.
+- **Dashboard** : interface web qui observe les deux processus via des fichiers partagés, sans jamais ajouter de latence
+  au trading.
+
+## Stratégies
+
+| Stratégie            | Type                                  | Nom (`STRATEGY`) |
+|----------------------|---------------------------------------|------------------|
+| SAC (Soft Actor-Critic) | RL off-policy — market making      | `sac`            |
+| PPO                  | RL policy-based, on-policy            | `ppo`            |
+| A2C                  | RL actor-critic, on-policy            | `a2c`            |
+| DQN                  | RL value-based                        | `dqn`            |
+| Dreamer v3           | RL model-based                        | — (entraînement) |
+| Mean Reversion       | Heuristique (écart à la SMA)          | `mean_reversion` (défaut) |
+| RSI (14)             | Heuristique momentum                  | `rsi`            |
+| Bollinger Bands      | Heuristique volatilité                | `bollinger`      |
+| SMA crossover        | Heuristique tendance                  | `sma`            |
+| Random               | Référence aléatoire                   | `random`         |
+
+### SAC : market making
+
+Contrairement aux autres agents RL, qui sont directionnels, SAC place simultanément un ordre d'achat et un ordre de vente
+autour du midprice. Son action est continue : deux spreads entre 0 et 0,5 %. La reward s'inspire du modèle
+Avellaneda-Stoikov :
+
+- gain du spread capturé à chaque fill ;
+- pénalité quadratique sur l'inventaire, pour rester neutre ;
+- pénalité de sélection adverse.
+
+Évaluation sur données jamais vues (5 seeds × 50 épisodes) : reward moyenne de 160,68 ± 4,86, Sharpe de 8,82, drawdown
+maximal de 7,09 %, taux de fill de 18,3 %. C'est environ 2× mieux que la politique aléatoire et 3× mieux qu'un spread
+fixe de 0,2 %.
 
 ## Installation
 
 ### Prérequis
 
-- CMake 3.10+
-- C++20 compiler (GCC 10+, Clang 10+, MSVC 2019+)
-- Dépendances : libcurl 8.4.0, nlohmann/json 3.11.3 (téléchargées automatiquement)
+- CMake 3.10+ et un compilateur C++20 (GCC 10+, Clang 10+, MSVC 2019+)
+- Python 3.10+
+- Un compte [Binance testnet](https://testnet.binance.vision/) pour les clés API
 
-### Compilation
+### Moteur C++
 
-**Première fois (configuration initiale)** :
 ```bash
-mkdir build && cd build
-cmake ..
-cmake --build . --config Release -j$(nproc)
-```
-
-**Après modification du code** :
-```bash
-# Méthode simple (recommandé)
 ./build.sh
-
-# Ou manuellement
-cd build
-cmake --build . --config Release -j$(nproc)
 ```
+
+`libcurl` et `nlohmann/json` sont téléchargés automatiquement par CMake (`FetchContent`). Les exécutables sont générés
+dans `build/` : `LiveMarketData` et `OrderBookTests`.
+
+### Python
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install torch tensorflow gymnasium numpy pandas matplotlib requests
+```
+
+### Clés Binance
+
+```bash
+cp agents/exchange/config.example.py agents/exchange/config.py
+# puis renseigner BINANCE_TESTNET_API_KEY et BINANCE_TESTNET_API_SECRET
+```
+
+`config.py` contient des secrets : ne pas le committer.
 
 ## Utilisation
 
-### Méthode Rapide (Scripts)
+### Lancer le marché et un agent
 
 ```bash
-# Terminal 1 - Market C++ (lance uniquement)
-./run_market.sh
+# Terminal 1 — moteur C++ : ./run_market.sh [SYMBOL] [REFRESH_SECONDS] [DEPTH_LEVELS]
+./run_market.sh SOLUSDT 1 50
 
-# Terminal 2 - Agent Python
-./run_agent.sh
+# Terminal 2 — agent Python
+./run_agent.sh sac            # ou : STRATEGY=sac SYMBOL=SOLUSDT python3 -m agents.main
 ```
 
-### Méthode Manuelle
+### Dashboard
 
 ```bash
-# Tests et benchmarks
-./build/OrderBookTests
-
-# Affichage temps réel
-./build/LiveMarketData SOLUSDT 1 20
-# [SYMBOL] [REFRESH_SECONDS] [DEPTH_LEVELS]
+./run_dashboard.sh            # http://127.0.0.1:8090  (--restart pour relancer)
 ```
 
-## Trading Agent Python
+Le dashboard affiche :
 
-Un agent de trading simple qui observe le marché et exécute des ordres selon une stratégie mean-reversion.
+- un graphique en chandeliers ;
+- le carnet d'ordres live (8 niveaux) ;
+- la courbe de PnL ;
+- la dernière décision de l'agent ;
+- l'inventaire ;
+- les logs de l'agent et du marché.
 
-### Exécution
+Il permet aussi de changer d'agent ou de paire à chaud. L'accès est protégé par authentification.
+
+### Entraîner les agents RL
+
+Les agents sont entraînés hors ligne sur des historiques `aggTrades` de Binance (fichiers CSV placés dans `data/` ou
+`training_data/`). Les poids entraînés sont enregistrés dans `models/`.
 
 ```bash
-python3 -m agents.main
-# ou
-python3 agents/main.py
+python3 -m agents.strategies.train_sac     # SAC
+python3 agents/strategies/eval_sac.py      # évaluation multi-seed de SAC
+python3 -m agents.train_a2c                # A2C
+python3 -m agents.train_dreamer            # Dreamer v3 (ou : python3 run_dreamer.py --fast)
+python3 agents/ppo/train_ppo.py            # PPO
+python3 agents/dqn/train_dqn.py            # DQN
+python3 compute_metrics.py                 # métriques comparatives
 ```
 
-**Fichiers utilisés** :
-- data/market_state.json (lecture)
-- data/agent_orders.json (écriture)
+### Tests et benchmarks
 
-### Stratégie
-
-L'agent implémente une stratégie **Mean Reversion** :
-- **ACHETER** quand le prix est 2% sous la moyenne mobile (SMA)
-- **VENDRE** quand le prix est 2% au-dessus de la SMA
-- **ATTENDRE** sinon
-
-### Fonctionnalités
-
-- 📊 Observation en temps réel de l'orderbook Binance
-- 🎯 Analyse technique (SMA, déviation de prix)
-- 📝 Gestion des ordres et positions
-- 💰 Suivi P&L non réalisé
-- 📈 Affichage détaillé du marché et des performances
-
-### Exemple de sortie
-
-```
-================================================================================
- MARKET STATE                         SOLUSDT        13:45:23
-================================================================================
-Bid:    $103.25  |  Ask: $103.27  |  Mid: $103.26
-Spread:   1.94 bps  |  SMA:    $103.15
-
-Orderbook Bids:
-    $103.25  x  1234.56
-    $103.24  x   891.23
-    $103.23  x  2145.67
-
-Orderbook Asks:
-    $103.27  x  1567.89
-    $103.28  x   723.45
-    $103.29  x  1234.56
-
-================================================================================
- Decision: BUY
-   Reason: Price -2.1% below SMA (-2.15%)
-
-✅ Order #1 placed: BUY 5.0 @ $103.25
-
-================================================================================
- POSITION
-================================================================================
-  Qty:      5.00 | Entry: $ 103.25 | Current: $ 103.26 | PnL: $   0.05
+```bash
+./build/OrderBookTests                     # tests du moteur C++
+./benchmark.sh                             # benchmark du carnet d'ordres
+./scripts/test_dashboard_all.sh            # tests du dashboard (API + end-to-end Playwright)
 ```
 
-## Structure
+### Rapport et présentation
 
-```
-orderbook-simulator-cpp/
-├── agents/               # Agents Python (structure modulaire)
-│   ├── __init__.py
-│   ├── main.py          # Point d'entrée
-│   ├── agent.py         # Orchestrateur TradingAgent
-│   ├── strategy.py      # Stratégie de trading
-│   ├── market_data.py   # Gestion données marché
-│   ├── display.py       # Fonctions d'affichage
-│   └── types.py         # Types et enums
-├── data/                 # Fichiers JSON échangés
-│   ├── agent_orders.json
-│   └── market_state.json
-├── include/              # En-têtes
-│   ├── Core/
-│   ├── OrderBook/
-│   ├── MarketData/
-│   └── LiveMarketData/
-├── src/                  # Implémentations
-│   ├── OrderBook/
-│   └── LiveMarketData/
-├── tests/                # Tests
-│   └── tests.cpp
-└── CMakeLists.txt
+```bash
+make pdf                                   # compile rapport/rapport.pdf et rapport/presentation.pdf
 ```
 
-### Matching Logic
+## Moteur de carnet d'ordres C++
 
-Orders match when:
+- **Types d'ordres** : GoodTillCancel, Market, ImmediateOrCancel, FillOrKill, GoodForDay
+- **Matching** : priorité prix-temps (FIFO au sein d'un niveau de prix). Les fills partiels sont acceptés, sauf pour
+  FillOrKill.
+- **Structures de données** : maps triées séparées pour les bids et les asks, itérateurs stockés pour une annulation
+  en O(1).
 
-- Buy price ≥ Best ask price, or
-- Sell price ≤ Best bid price
+| Opération        | Complexité | Débit mesuré        |
+|------------------|------------|---------------------|
+| Ajout d'ordre    | O(log n)   | ~400K ops/s         |
+| Annulation       | O(1)       | ~2M ops/s           |
+| Modification     | O(log n)   | ~270K ops/s         |
+| Matching         | O(k log n) | ~350K matches/s     |
 
-Matching proceeds in price-time priority:
+*n = nombre de niveaux de prix, k = nombre de matches. Latence typique : 2–4 μs.*
 
-1. Best price levels matched first
-2. Within a price level, earliest orders matched first (FIFO)
-3. Partial fills supported for all order types except FillOrKill
+## Structure du projet
 
-#
-## Performance Characteristics
+```
+├── agents/                 # Agents Python
+│   ├── main.py             # Point d'entrée (choix de la stratégie via STRATEGY)
+│   ├── engine.py           # Moteur d'exécution : I/O avec le C++, positions, ordres
+│   ├── interfaces.py       # Interface BaseStrategy
+│   ├── strategies/         # Stratégies heuristiques et RL (SAC, PPO, A2C, DQN, Dreamer…)
+│   ├── ppo/ dqn/           # Entraînement et évaluation PPO / DQN
+│   ├── train_*.py          # Entraînement A2C, Dreamer
+│   └── exchange/           # Client Binance testnet
+├── include/ src/           # Moteur C++ (OrderBook, LiveMarketData)
+├── tests/                  # Tests et benchmark C++
+├── dashboard/              # Serveur HTTP Python et front-end JS
+├── models/                 # Poids entraînés et courbes d'apprentissage
+├── data/                   # Fichiers JSON échangés entre les processus
+└── rapport/                # Rapport et présentation LaTeX
+```
 
-| Operation      | Complexity | Measured Throughput |
-|----------------|------------|---------------------|
-| Add Order      | O(log n)   | ~400K ops/sec       |
-| Cancel Order   | O(1)       | ~2M ops/sec         |
-| Modify Order   | O(log n)   | ~270K ops/sec       |
-| Match Orders   | O(k log n) | ~350K matches/sec   |
-| Get Order Info | O(m)       | ~500K snapshots/sec |
+### Ajouter une stratégie
 
-*n = number of price levels, k = number of matches, m = number of orders*
+1. Créer `agents/strategies/ma_strategie.py` en implémentant l'interface `BaseStrategy`.
+2. L'enregistrer dans `agents/main.py`.
+3. La lancer avec `STRATEGY=ma_strategie python3 -m agents.main`.
 
-Benchmarks run on typical development hardware. Actual performance depends on system configuration and workload
-characteristics.
+## Auteurs
 
-## Implementation Notes
-
-### Design Decisions
-
-**Why separate bids/asks maps?** Allows different sorting orders (descending for bids, ascending for asks) and
-simplifies best bid/ask access.
-
-**Why store iterators in OrderEntry?** Enables O(1) removal from the price level list when canceling orders.
-
-**Why shared_ptr for orders?** Allows orders to be referenced in multiple places (main map, price level list) without
-copying. Trade-off between memory overhead and simplicity.
-
-**Market order conversion:** Market orders are converted to limit orders at extreme prices (max/min) to reuse the
-matching logic.
-
-### Order Type Behavior
-
-- **GoodTillCancel**: Remains active until filled or cancelled
-- **Market**: Immediately converted to aggressive limit order
-- **ImmediateOrCancel**: Partial fills accepted, unfilled portion cancelled
-- **FillOrKill**: All-or-nothing execution, rejected if can't fill completely
-- **GoodForDay**: Cancelled at configured time (default 15:59)
-
+Bella Taleb El Alem, Yani Haouchine, Ihab Jaouad, Anas Benbaki, Mohamed Aziz Migaou, Soufiane Sbai.
